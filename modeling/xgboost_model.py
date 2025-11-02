@@ -94,8 +94,19 @@ class XGBoostModel(BaseModel):
         if sample_weight is not None:
             fit_kwargs['sample_weight'] = sample_weight
         
-        if early_stopping_rounds is not None:
-            fit_kwargs['early_stopping_rounds'] = early_stopping_rounds
+        # # XGBoost 3.0+ uses callbacks for early stopping
+        # if early_stopping_rounds is not None:
+        #     try:
+        #         from xgboost import callback
+        #         fit_kwargs['callbacks'] = [
+        #             callback.EarlyStopping(
+        #                 rounds=early_stopping_rounds,
+        #                 save_best=True
+        #             )
+        #         ]
+        #     except (ImportError, AttributeError):
+        #         # Fallback for older XGBoost versions
+        #         fit_kwargs['early_stopping_rounds'] = early_stopping_rounds
         
         # Merge additional kwargs
         fit_kwargs.update(kwargs)

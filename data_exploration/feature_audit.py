@@ -44,7 +44,7 @@ class FeatureAuditor:
         Get feature importance from trained model.
         
         Args:
-            model: Trained model
+            model: Trained model (can be our wrapper or sklearn/xgb model)
             feature_names: Feature names (optional)
         
         Returns:
@@ -52,7 +52,20 @@ class FeatureAuditor:
         """
         logger.info("Computing feature importance...")
         
-        importance = model.get_feature_importance()
+        # Try different methods to get feature importance
+        importance = None
+        
+        # Method 1: Try our wrapper's method
+        if hasattr(model, 'get_feature_importance'):
+            importance = model.get_feature_importance()
+        
+        # Method 2: Try sklearn/xgb attribute
+        if importance is None and hasattr(model, 'feature_importances_'):
+            importance = model.feature_importances_
+        
+        # Method 3: Try coef_ (for linear models)
+        if importance is None and hasattr(model, 'coef_'):
+            importance = np.abs(model.coef_).ravel()
         
         if importance is None:
             logger.warning("Model does not support feature importance")

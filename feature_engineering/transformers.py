@@ -74,18 +74,41 @@ class Log1pTransformer(BaseEstimator, TransformerMixin):
         return A
 
 
-def create_business_missing_indicator(column_name: str):
+class BusinessMissingIndicator(BaseEstimator, TransformerMixin):
     """
-    Create a function transformer for business missing indicator.
+    Transformer for creating business missing indicator.
     
-    Args:
-        column_name: Name of the column
-    
-    Returns:
-        FunctionTransformer
+    Creates a binary indicator for missing values that have business meaning.
+    This class is picklable, unlike a FunctionTransformer with a closure.
     """
-    def _indicator(X):
-        """Extract missing indicator from DataFrame or Series."""
+    
+    def __init__(self):
+        """Initialize business missing indicator."""
+        pass
+    
+    def fit(self, X, y=None):
+        """
+        Fit is a no-op for this transformer.
+        
+        Args:
+            X: Input data
+            y: Target (unused)
+        
+        Returns:
+            self
+        """
+        return self
+    
+    def transform(self, X):
+        """
+        Transform by creating missing indicator.
+        
+        Args:
+            X: Input data (DataFrame, Series, or array)
+        
+        Returns:
+            Binary array indicating missingness
+        """
         if isinstance(X, pd.DataFrame):
             s = X.iloc[:, 0]
         elif isinstance(X, pd.Series):
@@ -104,5 +127,7 @@ def create_business_missing_indicator(column_name: str):
         
         return missing.astype(int).to_numpy().reshape(-1, 1)
     
-    return FunctionTransformer(_indicator, validate=False)
+    def get_feature_names_out(self, input_features=None):
+        """Get output feature names."""
+        return np.array(["business_missing_indicator"])
 

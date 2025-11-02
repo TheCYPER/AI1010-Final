@@ -129,11 +129,11 @@ class MultiClassTargetEncoder(BaseEstimator, TransformerMixin):
             })
             
             # Total count per category
-            total = dfc.groupby(c)["__y__"].count()
+            total = dfc.groupby(c, observed=True)["__y__"].count()
             
             # Count per class per category
             by_cls = {
-                k: dfc[dfc["__y__"] == k].groupby(c)["__y__"].count()
+                k: dfc[dfc["__y__"] == k].groupby(c, observed=True)["__y__"].count()
                 for k in self.classes_
             }
             

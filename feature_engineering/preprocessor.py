@@ -13,7 +13,7 @@ from sklearn.preprocessing import OneHotEncoder
 from .encoders import FrequencyEncoder, MultiClassTargetEncoder
 from .wide_features import WideFeatureBuilder
 from .statistical_features import StatisticalAggregator
-from .transformers import Log1pTransformer, create_business_missing_indicator
+from .transformers import Log1pTransformer, BusinessMissingIndicator
 
 
 def build_preprocessor(
@@ -117,7 +117,7 @@ def build_preprocessor(
     
     # Business missing indicator
     if business_missing_col:
-        crq_missing_tf = create_business_missing_indicator(business_missing_col)
+        crq_missing_tf = BusinessMissingIndicator()
         transformers.append(
             ("crq_missing", crq_missing_tf, [business_missing_col])
         )
