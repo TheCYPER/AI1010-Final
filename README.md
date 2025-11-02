@@ -1,670 +1,442 @@
-# Office Category Prediction - ML Pipeline
+# Office Category Prediction - 模块化机器学习项目
 
-A modular, production-ready machine learning pipeline for office category classification.
-
-## 📁 Project Structure
-
-```
-AI1010Final/
-├── configs/                    # Configuration management
-│   ├── __init__.py
-│   └── config.py              # Centralized configuration
-│
-├── data_cleaning/             # Data cleaning utilities
-│   ├── __init__.py
-│   ├── column_types.py        # Column type inference
-│   ├── missing_handler.py     # Missing value handling
-│   └── outlier_handler.py     # Outlier detection & handling
-│
-├── data_exploration/          # EDA and feature auditing
-│   ├── __init__.py
-│   ├── exploratory_analysis.py # Basic EDA
-│   └── feature_audit.py       # Feature importance & drift analysis
-│
-├── feature_engineering/       # Feature engineering modules
-│   ├── __init__.py
-│   ├── encoders.py           # Frequency & target encoding
-│   ├── wide_features.py      # Derived feature builder
-│   ├── statistical_features.py # Statistical aggregations
-│   ├── transformers.py       # Log transforms, etc.
-│   └── preprocessor.py       # Main preprocessor assembly
-│
-├── modeling/                  # Model definitions
-│   ├── __init__.py
-│   ├── base_model.py         # Abstract base class
-│   ├── xgboost_model.py      # XGBoost wrapper
-│   └── ensemble.py           # Ensemble methods
-│
-├── training/                  # Training logic
-│   ├── __init__.py
-│   ├── trainer.py            # Single split trainer
-│   └── cross_validator.py   # K-fold cross-validation
-│
-├── hyperparameter_tuning/    # Hyperparameter optimization
-│   ├── __init__.py
-│   └── tuner.py             # Optuna-based tuning
-│
-├── utils/                    # Utility functions
-│   ├── __init__.py
-│   ├── logger.py            # Logging utilities
-│   └── metrics.py           # Evaluation metrics
-│
-├── datasets/                 # Data directory
-│   ├── office_train.csv
-│   └── office_test.csv
-│
-├── outputs/                  # Output directory (created automatically)
-│   ├── models/              # Trained models
-│   ├── metrics/             # Evaluation metrics
-│   ├── predictions/         # Test predictions
-│   └── logs/               # Log files
-│
-├── main.py                  # Main entry point
-├── requirements.txt         # Python dependencies
-└── README.md               # This file
-```
-
-## 🚀 Quick Start
-
-### 1. Installation
-
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### 2. Exploratory Data Analysis
-
-```bash
-python main.py --mode eda
-```
-
-This will:
-- Analyze missing values
-- Show target distribution
-- Compute cardinality
-- Generate statistics
-- Save report to `outputs/eda_report.json`
-
-### 3. Train Model (Single Split)
-
-```bash
-python main.py --mode train
-```
-
-This will:
-- Load and split data (80/20)
-- Build preprocessing pipeline
-- Train XGBoost model
-- Evaluate on validation set
-- Save model to `outputs/models/pipeline.joblib`
-- Save metrics to `outputs/metrics/metrics.json`
-
-### 4. Cross-Validation Training
-
-```bash
-python main.py --mode cv
-```
-
-This will:
-- Perform 5-fold stratified cross-validation
-- Train model on each fold
-- Aggregate results with mean ± std
-- Save summary to `outputs/models/cv/cv_summary.json`
-
-### 5. Hyperparameter Tuning
-
-```bash
-python main.py --mode tune
-```
-
-This will:
-- Use Optuna for Bayesian optimization
-- Run 100 trials (configurable)
-- Save best parameters to `outputs/tuning_results.json`
-
-### 6. Feature Audit
-
-```bash
-python main.py --mode audit
-```
-
-This will:
-- Compute feature importance
-- Run permutation importance
-- Check for train/val drift (adversarial validation)
-- Identify highly correlated features
-- Save report to `outputs/feature_audit.json`
-
-### 7. Make Predictions
-
-```bash
-python main.py --mode predict --model_path outputs/models/pipeline.joblib
-```
-
-This will:
-- Load trained model
-- Make predictions on test set
-- Save to `outputs/predictions/submission.csv`
-
-## 🔧 Configuration
-
-All configuration is centralized in `configs/config.py`. Key sections:
-
-### Paths
-```python
-train_csv = "datasets/office_train.csv"
-test_csv = "datasets/office_test.csv"
-output_dir = "outputs"
-```
-
-### Model Parameters
-```python
-xgb_params = {
-    'n_estimators': 1500,
-    'learning_rate': 0.06,
-    'max_depth': 4,
-    'subsample': 0.75,
-    'colsample_bytree': 0.55,
-    'reg_lambda': 10.0,
-    'reg_alpha': 3.0,
-    ...
-}
-```
-
-### Feature Engineering
-```python
-freq_encoding_cols = ['RoofType', 'ExteriorCovering1', 'FoundationType']
-target_encoding_cols = ['ZoningClassification', 'BuildingType', ...]
-```
-
-### Training
-```python
-test_size = 0.2
-n_splits = 5
-use_class_weights = True
-use_early_stopping = True
-```
-
-## 🧪 Feature Engineering Pipeline
-
-The pipeline includes:
-
-1. **Missing Value Handling**
-   - Median imputation for numeric features
-   - Constant imputation for categorical features
-   - Missing indicators
-
-2. **Encoding**
-   - Frequency encoding for high-cardinality features
-   - Target encoding with Laplace smoothing
-   - One-hot encoding for low-cardinality features
-
-3. **Wide Features** (40+ derived features)
-   - Age features: BuildingAge, YearsSinceRenovation
-   - Area features: TotalLivingArea, TotalBasementArea
-   - Ratio features: PlotCoverage, RoomDensity, etc.
-   - Quality combinations: OverallQuality, ExteriorScore
-   - Temporal features: SeasonListed, BuildingLifeStage
-   - Interaction features: QualityAreaProximity
-   - Domain knowledge: RoomSizeAdequacy, ParkingAdequacy
-
-4. **Statistical Aggregations**
-   - Group-level z-scores
-   - Relative shifts from group mean
-
-5. **Transformations**
-   - Log1p for skewed features (PlotSize)
-
-## 📊 Model Performance
-
-The pipeline is optimized for accuracy with:
-- Stratified sampling
-- Class weighting for imbalanced data
-- Early stopping to prevent overfitting
-- Comprehensive regularization (L1/L2)
-
-Expected validation accuracy: **~75-80%** (depending on feature selection and tuning)
-
-## 🔬 Advanced Usage
-
-### Custom Configuration
-
-Create a custom config and pass it:
-
-```python
-from configs import Config
-
-config = Config()
-config.models.xgb_params['n_estimators'] = 2000
-config.training.n_splits = 10
-
-# Use in your code
-from training import Trainer
-trainer = Trainer(config)
-trainer.run()
-```
-
-### Programmatic API
-
-You can also use the modules programmatically:
-
-```python
-from configs import Config
-from training import Trainer
-from modeling import XGBoostModel
-
-# Setup
-config = Config()
-trainer = Trainer(config)
-
-# Load data
-X, y = trainer.load_data()
-X_train, X_val, y_train, y_val = trainer.split_data(X, y)
-
-# Build preprocessor
-trainer.build_preprocessor(X_train)
-
-# Train
-model = XGBoostModel(config=config.models.xgb_params)
-results = trainer.train(model, X_train, y_train, X_val, y_val)
-```
-
-### Adding New Features
-
-Extend `WideFeatureBuilder` in `feature_engineering/wide_features.py`:
-
-```python
-def _add_custom_features(self, df: pd.DataFrame, out: Dict[str, Any]):
-    """Add your custom features."""
-    # Example: Interaction between two features
-    out["CustomFeature"] = df["Feature1"] * df["Feature2"]
-```
-
-## 📝 Development Notes
-
-### Design Principles
-
-1. **Modularity**: Each component is self-contained and reusable
-2. **Extensibility**: Easy to add new features, models, or strategies
-3. **Configurability**: Centralized configuration for easy experimentation
-4. **Sklearn Compatibility**: All transformers follow sklearn API
-5. **Production Ready**: Proper logging, error handling, serialization
-
-### Testing
-
-```bash
-# Run tests (if you add them)
-pytest tests/
-
-# Test individual modules
-python -c "from configs import Config; print(Config())"
-```
-
-### Adding New Models
-
-1. Create model class in `modeling/` inheriting from `BaseModel`
-2. Implement `build_model()`, `fit()`, `predict()` methods
-3. Update `main.py` to support new model
-
-Example:
-
-```python
-from modeling import BaseModel
-
-class MyCustomModel(BaseModel):
-    def build_model(self, **kwargs):
-        # Your model initialization
-        pass
-    
-    def fit(self, X, y, **kwargs):
-        # Training logic
-        pass
-    
-    def predict(self, X):
-        # Prediction logic
-        pass
-```
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Import errors**: Ensure virtual environment is activated
-2. **Memory issues**: Reduce `n_estimators` or use sampling
-3. **Optuna not found**: Install with `pip install optuna`
-
-### Performance Tips
-
-- Use `n_jobs=-1` for parallel processing
-- Enable early stopping to save time
-- Start with fewer CV folds (e.g., 3) during development
-- Use hyperparameter tuning sparingly (time-consuming)
-
-## 📚 References
-
-- [XGBoost Documentation](https://xgboost.readthedocs.io/)
-- [Scikit-learn](https://scikit-learn.org/)
-- [Optuna](https://optuna.org/)
-
-## 🤝 Contributing
-
-Feel free to:
-- Add new feature engineering techniques
-- Implement additional models
-- Improve hyperparameter search spaces
-- Add visualization utilities
-- Write tests
-
-## 📄 License
-
-This project is for educational purposes.
+一个完整的、模块化的机器学习训练框架，用于办公室类别分类任务。
 
 ---
 
-**Happy Modeling! 🎉**
-
-## ✨ 重构完成！项目已全部完成
-
-### 📊 项目统计
-
-**模块统计:**
-```
-✅ configs/               - 配置管理 (2 files)
-✅ data_cleaning/         - 数据清洗 (4 files)
-✅ data_exploration/      - 数据探索 (3 files)
-✅ feature_engineering/   - 特征工程 (6 files)
-✅ modeling/              - 模型定义 (4 files)
-✅ training/              - 训练逻辑 (3 files)
-✅ hyperparameter_tuning/ - 超参调优 (2 files)
-✅ utils/                 - 工具函数 (3 files)
-✅ main.py                - 主入口 (1 file)
-```
-
-**文档:**
-```
-✅ README.md           - 完整用户指南 (500+ 行)
-✅ ARCHITECTURE.md     - 架构设计文档 (600+ 行)
-```
-
----
-
-### 🎯 核心特性
-
-#### 1. **完全模块化** ✨
-- 每个模块职责单一、清晰
-- 易于测试和维护
-- 支持独立使用或组合使用
-
-#### 2. **配置驱动** ⚙️
-- 所有参数集中在 `configs/config.py`
-- 无需修改代码即可实验
-- 易于版本控制和复现
-
-#### 3. **CLI 接口** 🖥️
-```bash
-python main.py --mode eda      # 数据探索
-python main.py --mode train    # 单次训练
-python main.py --mode cv       # 交叉验证
-python main.py --mode tune     # 超参调优
-python main.py --mode predict  # 预测
-python main.py --mode audit    # 特征审计
-```
-
-#### 4. **完整特征工程** 🔧
-- ✅ 频率编码
-- ✅ 目标编码（带平滑）
-- ✅ 40+ 派生特征
-  - 年龄特征 (BuildingAge, YearsSinceRenovation, ...)
-  - 面积特征 (TotalLivingArea, 比率, ...)
-  - 质量组合 (OverallQuality, ExteriorScore, ...)
-  - 时间特征 (SeasonListed, BuildingLifeStage, ...)
-  - 交互特征 (QualityAreaProximity, ...)
-  - 领域知识 (RoomSizeAdequacy, ParkingAdequacy, ...)
-- ✅ 统计聚合 (组内 z-score, 相对偏移)
-- ✅ 对数变换
-
-#### 5. **灵活训练** 🎓
-- 单次划分训练
-- K折交叉验证
-- 类别权重处理
-- 早停机制
-- 完整日志记录
-
-#### 6. **超参调优** 🔍
-- 基于 Optuna 的贝叶斯优化
-- 支持并行搜索
-- 可视化优化历史
-- 自动保存最佳参数
-
-#### 7. **特征审计** 📈
-- 特征重要性分析
-- 置换重要性
-- 漂移检测（对抗验证）
-- 相关性分析
-
----
-
-### 🚀 快速开始
-
-#### 1. 安装依赖
+## 📦 安装
 
 ```bash
-# 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate
+# 创建并激活虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
 # 安装依赖
 pip install -r requirements.txt
 ```
 
-#### 2. 运行第一个训练
+---
+
+## 🚀 快速开始
+
+### 1. 完整训练流程（推荐新手）
 
 ```bash
+# 步骤 1: 数据探索（了解数据）
+python main.py --mode eda
+
+# 步骤 2: 训练模型
 python main.py --mode train
+
+# 步骤 3: 生成预测
+python main.py --mode predict
+
+# 步骤 4: 特征审计（分析特征重要性）
+python main.py --mode audit
 ```
 
-**预期输出:**
-```
-======================================================================
-STARTING TRAINING
-======================================================================
-Loading data from datasets/office_train.csv
-...
-Train Accuracy: 0.8234
-Val Accuracy:   0.7456
-======================================================================
-✓ SUCCESS
-======================================================================
-```
+**输出文件：**
+- 模型：`outputs/models/pipeline.joblib`
+- 预测：`outputs/predictions/submission.csv`
+- 指标：`outputs/metrics/metrics.json`
 
-#### 3. 生成预测
+### 2. 高级训练选项
 
 ```bash
-python main.py --mode predict
-```
+# 交叉验证（更可靠的性能评估）
+python main.py --mode cv
 
-**输出:** `outputs/predictions/submission.csv`
+# 超参数调优（寻找最佳参数）
+python main.py --mode tune
+```
 
 ---
 
-### 📂 项目结构
+## 📂 项目结构
 
 ```
 AI1010Final/
-├── 📝 configs/                   # 配置管理
-│   ├── __init__.py
-│   └── config.py                 # 集中配置
+├── configs/                    # ⚙️ 配置文件
+│   └── config.py              # 所有参数都在这里
 │
-├── 🧹 data_cleaning/             # 数据清洗
-│   ├── column_types.py           # 类型推断
-│   ├── missing_handler.py        # 缺失值处理
-│   └── outlier_handler.py        # 异常值处理
+├── feature_engineering/       # 🔧 特征工程
+│   ├── encoders.py           # 编码器（频率、目标编码）
+│   ├── wide_features.py      # 派生特征（40+ 个）
+│   ├── transformers.py       # 转换器（log、缺失值）
+│   └── preprocessor.py       # 预处理管道组装
 │
-├── 📊 data_exploration/          # 数据探索
+├── modeling/                  # 🤖 模型定义
+│   ├── xgboost_model.py      # XGBoost 模型
+│   └── ensemble.py           # 集成模型
+│
+├── training/                  # 🎓 训练逻辑
+│   ├── trainer.py            # 单次训练
+│   └── cross_validator.py    # 交叉验证
+│
+├── hyperparameter_tuning/    # 🔍 超参数优化
+│   └── tuner.py              # Optuna 调优
+│
+├── data_exploration/         # 📊 数据分析
 │   ├── exploratory_analysis.py  # EDA
-│   └── feature_audit.py          # 特征审计
+│   └── feature_audit.py         # 特征审计
 │
-├── 🔧 feature_engineering/       # 特征工程
-│   ├── encoders.py               # 编码器
-│   ├── wide_features.py          # 宽特征
-│   ├── statistical_features.py  # 统计特征
-│   ├── transformers.py           # 转换器
-│   └── preprocessor.py           # 预处理器组装
-│
-├── 🤖 modeling/                  # 模型定义
-│   ├── base_model.py             # 基类
-│   ├── xgboost_model.py          # XGBoost
-│   └── ensemble.py               # 集成模型
-│
-├── 🎓 training/                  # 训练逻辑
-│   ├── trainer.py                # 训练器
-│   └── cross_validator.py        # 交叉验证
-│
-├── 🔍 hyperparameter_tuning/     # 超参调优
-│   └── tuner.py                  # Optuna 调优器
-│
-├── 🛠️ utils/                     # 工具函数
-│   ├── logger.py                 # 日志
-│   └── metrics.py                # 评估指标
-│
-├── 🚀 main.py                    # 主入口
-│
-├── 📚 Documentation/             # 文档
-│   ├── README.md                 # 用户指南
-│   ├── ARCHITECTURE.md           # 架构文档
-│   ├── QUICKSTART.md             # 快速开始
-│   ├── PROJECT_SUMMARY.md        # 项目总结
-│   └── COMPARISON.md             # 新旧对比
-│
-├── requirements.txt              # 依赖
-├── .gitignore                    # Git 忽略
-│
-└── WXYVer/                       # 原始代码（保留）
-    └── ...                        # 未修改
+├── data_cleaning/            # 🧹 数据清洗
+├── utils/                    # 🛠️ 工具函数
+├── main.py                   # 🚪 主入口
+└── datasets/                 # 📁 数据目录
 ```
 
 ---
 
-### ✅ 完成清单
+## 🎯 训练工作流程
 
-**核心模块:**
-- [x] 配置管理模块
-- [x] 数据清洗模块
-- [x] 数据探索模块
-- [x] 特征工程模块
-- [x] 模型定义模块
-- [x] 训练模块
-- [x] 超参调优模块
-- [x] 工具函数模块
+### 方案 A: 快速实验（单次训练）
 
-**功能:**
-- [x] CLI 接口
-- [x] 单次训练
-- [x] 交叉验证
-- [x] 超参调优
-- [x] 预测功能
-- [x] EDA 工具
-- [x] 特征审计
+```
+数据加载 → 特征工程 → 训练模型 → 评估 → 预测
+   ↓           ↓          ↓        ↓      ↓
+office_   preprocessor  XGBoost  metrics  submission.csv
+train.csv  pipeline               .json
+```
 
-**文档:**
-- [x] README.md
-- [x] ARCHITECTURE.md
-- [x] QUICKSTART.md
-- [x] PROJECT_SUMMARY.md
-- [x] COMPARISON.md
-- [x] 内联文档字符串
-
-**质量:**
-- [x] 模块化设计
-- [x] Sklearn 兼容
-- [x] 类型提示
-- [x] 错误处理
-- [x] 日志记录
-- [x] 配置驱动
-
----
-
-### 🎉 主要改进
-
-| 方面 | 原始 WXYVer | 新架构 |
-|------|-------------|--------|
-| **组织** | 单文件 579 行 | 多模块 < 400 行/文件 |
-| **配置** | 分散 | 集中化 |
-| **可重用性** | 低 | 高 |
-| **可测试性** | 难 | 易 |
-| **文档** | 最小 | 全面 |
-| **可扩展性** | 中 | 高 |
-| **CLI** | ❌ | ✅ |
-| **超参调优** | ❌ | ✅ Optuna |
-| **特征审计** | ❌ | ✅ |
-
----
-
-### 🔄 与原始代码的关系
-
-**原始 WXYVer 代码:**
-- ✅ 完全保留，未修改
-- ✅ 仍然可用
-- ✅ 可用于对比
-
-**新架构:**
-- 📦 独立在外层目录
-- 🔧 保留所有特征工程逻辑
-- ➕ 添加新功能和改进
-- 📚 添加完整文档
-
-**迁移策略:**
-1. 两个版本可以共存
-2. 逐步迁移到新架构
-3. 对比结果验证正确性
-4. 最终选择最适合的版本
-
----
-
-### 📖 下一步
-
-#### 新用户:
-1. 阅读 `QUICKSTART.md`
-2. 运行 `python main.py --mode train`
-3. 探索不同模式
-
-#### 开发者:
-1. 阅读 `ARCHITECTURE.md`
-2. 理解设计决策
-3. 添加自定义特征/模型
-
-#### 高级用户:
-1. 调整 `configs/config.py`
-2. 运行超参调优
-3. 创建集成模型
-
----
-
-### 💡 关键优势
-
-1. **生产就绪** - 可直接用于生产环境
-2. **易于维护** - 清晰的结构和文档
-3. **高度灵活** - 配置驱动，易于实验
-4. **完全可扩展** - 添加新功能很简单
-5. **团队友好** - 易于协作和理解
-
----
-
-### 🎊 项目状态: **完成并可用**
-
-所有模块已实现、测试并文档化。准备好用于实验和生产！
-
-**立即开始:**
+**命令：**
 ```bash
-cd /Users/percy/AI1010Final
+python main.py --mode train   # 训练
+python main.py --mode predict # 预测
+```
+
+**适用场景：** 快速迭代、测试新特征
+
+---
+
+### 方案 B: 可靠评估（交叉验证）
+
+```
+数据加载 → 5折交叉验证 → 聚合结果
+   ↓           ↓            ↓
+office_    每折训练+评估   mean ± std
+train.csv                  metrics
+```
+
+**命令：**
+```bash
+python main.py --mode cv
+```
+
+**适用场景：** 最终模型选择、性能报告
+
+---
+
+### 方案 C: 参数优化（超参数调优）
+
+```
+定义搜索空间 → Optuna 优化 → 找到最佳参数 → 重新训练
+      ↓              ↓              ↓            ↓
+  config.py     100 trials    best_params   final model
+```
+
+**命令：**
+```bash
+python main.py --mode tune  # 调优
+# 然后将最佳参数复制到 configs/config.py
+python main.py --mode train # 用最佳参数训练
+```
+
+**适用场景：** 性能调优、竞赛提分
+
+---
+
+## ⚙️ 配置管理
+
+**所有参数都在 `configs/config.py` 中集中管理！**
+
+### 常用配置示例
+
+```python
+# configs/config.py
+
+# 1. 修改训练参数
+class TrainConfig:
+    test_size = 0.2        # 验证集比例
+    n_splits = 5           # 交叉验证折数
+    use_early_stopping = True  # 早停
+
+# 2. 修改模型参数
+class XGBParams:
+    n_estimators = 1500    # 树的数量
+    learning_rate = 0.06   # 学习率
+    max_depth = 4          # 树深度
+    subsample = 0.75       # 样本采样
+    
+# 3. 修改特征工程
+class Columns:
+    # 使用频率编码的列
+    freq_encoding_cols = ['RoofType', 'ExteriorCovering1']
+    
+    # 使用目标编码的列
+    target_encoding_cols = ['ZoningClassification', 'BuildingType']
+```
+
+**修改配置后无需改代码，直接运行即可！**
+
+---
+
+## 🔧 如何添加新功能
+
+### 1️⃣ 添加新特征
+
+**位置：** `feature_engineering/wide_features.py`
+
+```python
+class WideFeatureBuilder(BaseEstimator, TransformerMixin):
+    def _add_custom_features(self, df: pd.DataFrame, out: Dict[str, Any]):
+        """在这里添加你的自定义特征"""
+        
+        # 示例 1: 简单交互特征
+        out["QualityTimesArea"] = df["OverallQual"] * df["GrLivArea"]
+        
+        # 示例 2: 条件特征
+        out["HasPool"] = (df["PoolArea"] > 0).astype(int)
+        
+        # 示例 3: 比率特征
+        total_area = df["TotalBsmtSF"] + df["GrLivArea"]
+        out["BasementRatio"] = df["TotalBsmtSF"] / (total_area + 1e-6)
+        
+        # 示例 4: 领域知识特征
+        out["PricePerSqft"] = df["SalePrice"] / (df["GrLivArea"] + 1)
+```
+
+**然后运行：**
+```bash
+python main.py --mode train  # 新特征会自动使用
+```
+
+---
+
+### 2️⃣ 添加新模型
+
+**步骤 1:** 在 `modeling/` 创建新文件，如 `lightgbm_model.py`
+
+```python
+from modeling import BaseModel
+import lightgbm as lgb
+
+class LightGBMModel(BaseModel):
+    def build_model(self, **params):
+        """初始化模型"""
+        self.model_ = lgb.LGBMClassifier(**params)
+        return self.model_
+    
+    def fit(self, X, y, **kwargs):
+        """训练"""
+        eval_set = kwargs.get('eval_set', None)
+        self.model_.fit(
+            X, y,
+            eval_set=eval_set,
+            callbacks=[lgb.early_stopping(50)]
+        )
+        return self
+    
+    def predict(self, X):
+        """预测"""
+        return self.model_.predict(X)
+```
+
+**步骤 2:** 在 `main.py` 中添加对新模型的支持
+
+```python
+# main.py 中找到模型创建部分
+if config.models.model_type == "xgboost":
+    model = XGBoostModel(config=config.models.xgb_params)
+elif config.models.model_type == "lightgbm":  # 新增
+    from modeling.lightgbm_model import LightGBMModel
+    model = LightGBMModel(config=config.models.lgb_params)
+```
+
+**步骤 3:** 在 `configs/config.py` 添加配置
+
+```python
+@dataclass
+class ModelsConfig:
+    model_type: str = "lightgbm"  # 修改这里
+    lgb_params: dict = field(default_factory=lambda: {
+        'n_estimators': 1000,
+        'learning_rate': 0.05,
+        ...
+    })
+```
+
+---
+
+### 3️⃣ 添加新编码器
+
+**位置：** `feature_engineering/encoders.py`
+
+```python
+from sklearn.base import BaseEstimator, TransformerMixin
+
+class MyCustomEncoder(BaseEstimator, TransformerMixin):
+    """自定义编码器"""
+    
+    def __init__(self, columns=None):
+        self.columns = columns
+        self.mapping_ = {}
+    
+    def fit(self, X, y=None):
+        """学习编码映射"""
+        for col in self.columns:
+            # 你的编码逻辑
+            self.mapping_[col] = X[col].value_counts().to_dict()
+        return self
+    
+    def transform(self, X):
+        """应用编码"""
+        X = X.copy()
+        for col in self.columns:
+            X[col] = X[col].map(self.mapping_[col]).fillna(0)
+        return X
+```
+
+**然后在 `feature_engineering/preprocessor.py` 中使用：**
+
+```python
+from .encoders import MyCustomEncoder
+
+# 在 build_preprocessor 函数中添加
+transformers.append((
+    "my_encoder",
+    MyCustomEncoder(columns=['MyColumn']),
+    ['MyColumn']
+))
+```
+
+---
+
+### 4️⃣ 修改超参数搜索空间
+
+**位置：** `hyperparameter_tuning/tuner.py`
+
+```python
+def _suggest_xgb_params(self, trial: optuna.Trial) -> dict:
+    """定义搜索空间"""
+    return {
+        'n_estimators': trial.suggest_int('n_estimators', 500, 3000),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.2),
+        'max_depth': trial.suggest_int('max_depth', 3, 10),
+        
+        # 添加新参数
+        'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
+        'gamma': trial.suggest_float('gamma', 0, 5),
+    }
+```
+
+---
+
+## 📊 输出文件说明
+
+```
+outputs/
+├── models/
+│   ├── pipeline.joblib           # 完整训练管道（包含预处理+模型）
+│   └── cv/
+│       ├── fold_1.joblib          # 各折模型
+│       └── cv_summary.json        # CV 结果汇总
+│
+├── metrics/
+│   └── metrics.json               # 评估指标（精度、召回、F1等）
+│
+├── predictions/
+│   └── submission.csv             # 测试集预测结果
+│
+├── eda_report.json                # 数据探索报告
+├── feature_audit.json             # 特征重要性分析
+└── tuning_results.json            # 超参数调优结果
+```
+
+---
+
+## 💡 最佳实践
+
+### 典型工作流程
+
+```bash
+# 1. 第一次训练
+python main.py --mode eda      # 了解数据
+python main.py --mode train    # 快速训练
+python main.py --mode audit    # 分析特征
+
+# 2. 改进特征（修改 wide_features.py）
+python main.py --mode train    # 测试新特征
+
+# 3. 参数调优
+python main.py --mode tune     # 找最佳参数
+# 将最佳参数复制到 configs/config.py
+
+# 4. 最终训练
+python main.py --mode cv       # 交叉验证评估
+python main.py --mode train    # 训练最终模型
+python main.py --mode predict  # 生成提交文件
+```
+
+### 调试技巧
+
+```bash
+# 1. 检查数据
+python main.py --mode eda
+
+# 2. 检查特征重要性
+python main.py --mode audit
+
+# 3. 测试新特征（修改 configs/config.py 中的 test_size）
+# test_size = 0.5  # 加快训练速度
 python main.py --mode train
 ```
 
 ---
 
-🎉 **祝你建模愉快！** 🚀
+## 🔍 常见问题
+
+**Q: 如何快速测试新特征？**
+```python
+# configs/config.py
+class TrainConfig:
+    test_size = 0.5  # 减少训练数据，加快速度
+    
+class XGBParams:
+    n_estimators = 100  # 减少树的数量
+```
+
+**Q: 训练太慢怎么办？**
+```python
+# configs/config.py
+class XGBParams:
+    n_jobs = -1  # 使用所有 CPU 核心
+    tree_method = 'hist'  # 使用更快的算法
+```
+
+**Q: 如何保存多个模型版本？**
+```bash
+python main.py --mode train
+# 手动重命名模型
+mv outputs/models/pipeline.joblib outputs/models/pipeline_v1.joblib
+```
+
+---
+
+## 📚 核心特征
+
+- ✅ **模块化设计** - 每个功能独立，易于修改
+- ✅ **配置驱动** - 修改参数无需改代码
+- ✅ **Sklearn 兼容** - 所有转换器遵循标准接口
+- ✅ **完整管道** - 预处理 + 模型一体化
+- ✅ **40+ 特征** - 涵盖年龄、面积、质量、交互等
+- ✅ **多种训练模式** - 单次/交叉验证/调优
+- ✅ **特征分析** - 重要性/漂移/相关性
+
+---
+
+**开始训练吧！** 🚀
+
+```bash
+python main.py --mode train
+```
