@@ -140,7 +140,7 @@ class TrainingConfig:
 class HyperparameterTuningConfig:
     """Hyperparameter tuning configuration."""
     method: str = "optuna"  # "grid", "random", "optuna"
-    n_trials: int = 100
+    n_trials: int = 50
     cv_folds: int = 5
     scoring: str = "accuracy"
     timeout: Optional[int] = 3600  # 1 hour timeout
