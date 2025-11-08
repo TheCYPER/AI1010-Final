@@ -160,6 +160,10 @@ def run_prediction(config: Config, model_path: str, output_path: str = None):
     logger.info("Making predictions...")
     predictions = pipeline.predict(test_df)
     
+    # Ensure predictions is 1-dimensional
+    if len(predictions.shape) > 1:
+        predictions = predictions.ravel()
+    
     # Create submission
     submission = pd.DataFrame({
         'Id': range(len(predictions)),

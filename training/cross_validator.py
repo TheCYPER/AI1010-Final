@@ -35,6 +35,36 @@ class CrossValidator:
         self.fold_results_: List[Dict[str, Any]] = []
         self.aggregated_results_: Dict[str, Any] = {}
     
+    def _create_model(self, num_classes: int):
+        """
+        Create model based on config.
+        
+        Args:
+            num_classes: Number of classes
+        
+        Returns:
+            Model instance
+        """
+        model_type = self.config.models.model_type.lower()
+        
+        if model_type == "xgboost":
+            from modeling import XGBoostModel
+            model = XGBoostModel(config=self.config.models.xgb_params)
+        elif model_type == "catboost":
+            from modeling.catboost_model import CatBoostModel
+            model = CatBoostModel(config=self.config.models.catboost_params)
+        elif model_type == "lightgbm":
+            from modeling.lightgbm_model import LightGBMModel
+            model = LightGBMModel(config=self.config.models.lightgbm_params)
+        elif model_type == "tabnet":
+            from modeling.tabnet_model import TabNetModel
+            model = TabNetModel(config=self.config.models.tabnet_params)
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+        
+        model.build_model(num_classes=num_classes)
+        return model
+    
     def load_data(self) -> Tuple[pd.DataFrame, pd.Series]:
         """
         Load training data.
@@ -108,7 +138,6 @@ class CrossValidator:
         logger.info(f"{'='*70}")
         
         from feature_engineering import build_preprocessor
-        from modeling import XGBoostModel
         
         # Build preprocessor
         preprocessor = build_preprocessor(
@@ -131,10 +160,9 @@ class CrossValidator:
         # Compute sample weights
         sample_weight = self.compute_sample_weights(y_train)
         
-        # Build and train model
+        # Build and train model based on config
         num_classes = len(np.unique(y_train))
-        model = XGBoostModel(config=self.config.models.xgb_params)
-        model.build_model(num_classes=num_classes)
+        model = self._create_model(num_classes)
         
         fit_kwargs = {
             'X': X_train_transformed,

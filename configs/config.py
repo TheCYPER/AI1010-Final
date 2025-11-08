@@ -50,6 +50,9 @@ class ColumnConfig:
 @dataclass
 class ModelConfig:
     """Model-specific configurations."""
+    # Model type selection
+    model_type: str = "tabnet"  # Options: "xgboost", "catboost", "lightgbm", "tabnet", "ensemble"
+    
     # XGBoost parameters
     xgb_params: Dict[str, Any] = field(default_factory=lambda: {
         'objective': 'multi:softprob',
@@ -66,6 +69,62 @@ class ModelConfig:
         'eval_metric': 'mlogloss',
         'tree_method': 'hist',
         'n_jobs': -1
+    })
+    
+    # CatBoost parameters
+    catboost_params: Dict[str, Any] = field(default_factory=lambda: {
+        'iterations': 1700,
+        'learning_rate': 0.03,
+        'depth': 7,
+        'l2_leaf_reg': 15.0,
+        'random_seed': 42,
+        'loss_function': 'MultiClass',
+        'eval_metric': 'MultiClass',
+        'task_type': 'CPU',  # 'GPU' if you have GPU
+        'verbose': False,
+        'allow_writing_files': False,  # 不生成中间文件
+    })
+    
+    # LightGBM parameters
+    lightgbm_params: Dict[str, Any] = field(default_factory=lambda: {
+        'n_estimators': 1500,
+        'learning_rate': 0.05,
+        'max_depth': 7,
+        'num_leaves': 63,  # 通常设为 2^max_depth - 1
+        'min_child_samples': 20,
+        'subsample': 0.8,
+        'subsample_freq': 1,
+        'colsample_bytree': 0.8,
+        'reg_alpha': 3.0,
+        'reg_lambda': 10.0,
+        'random_state': 42,
+        'objective': 'multiclass',
+        'metric': 'multi_logloss',
+        'verbosity': -1,  # 不输出日志
+        'n_jobs': -1,
+        'force_col_wise': True,  # 避免警告
+    })
+
+    # TabNet parameters (深度学习模型)
+    tabnet_params: Dict[str, Any] = field(default_factory=lambda: {
+        # 模型架构参数（传给 TabNetClassifier.__init__）
+        'n_d': 64,                  # 决策层维度
+        'n_a': 64,                  # 注意力层维度
+        'n_steps': 5,               # 决策步数（类似树的深度）
+        'gamma': 1.5,               # 特征选择的松弛因子
+        'n_independent': 2,         # 独立的 GLU 层数
+        'n_shared': 2,              # 共享的 GLU 层数
+        'lambda_sparse': 1e-4,      # 稀疏正则化
+        'momentum': 0.3,            # Batch normalization 动量
+        'clip_value': 2.0,          # 梯度裁剪
+        'mask_type': 'entmax',      # 掩码类型: 'sparsemax' 或 'entmax'
+        'seed': 42,
+        'verbose': 0,
+        # 训练参数（传给 fit() 方法，需要单独处理）
+        '_max_epochs': 100,         # 最大训练轮数
+        '_batch_size': 256,         # 批大小
+        '_patience': 20,            # 早停轮数
+        '_lr': 2e-2,               # 学习率
     })
     
     # RandomForest parameters (for ensemble)

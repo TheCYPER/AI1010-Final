@@ -283,6 +283,40 @@ class Trainer:
         
         logger.info("Artifacts saved successfully")
     
+    def create_model(self, num_classes: int):
+        """
+        Create model based on config.
+        
+        Args:
+            num_classes: Number of classes
+        
+        Returns:
+            Model instance
+        """
+        model_type = self.config.models.model_type.lower()
+        
+        if model_type == "xgboost":
+            from modeling import XGBoostModel
+            model = XGBoostModel(config=self.config.models.xgb_params)
+            logger.info("Using XGBoost model")
+        elif model_type == "catboost":
+            from modeling.catboost_model import CatBoostModel
+            model = CatBoostModel(config=self.config.models.catboost_params)
+            logger.info("Using CatBoost model")
+        elif model_type == "lightgbm":
+            from modeling.lightgbm_model import LightGBMModel
+            model = LightGBMModel(config=self.config.models.lightgbm_params)
+            logger.info("Using LightGBM model")
+        elif model_type == "tabnet":
+            from modeling.tabnet_model import TabNetModel
+            model = TabNetModel(config=self.config.models.tabnet_params)
+            logger.info("Using TabNet model (Deep Learning)")
+        else:
+            raise ValueError(f"Unknown model type: {model_type}")
+        
+        model.build_model(num_classes=num_classes)
+        return model
+    
     def run(self) -> Dict[str, Any]:
         """
         Run complete training pipeline.
@@ -296,11 +330,9 @@ class Trainer:
         # Split data
         X_train, X_val, y_train, y_val = self.split_data(X, y)
         
-        # Create model
-        from modeling import XGBoostModel
-        model = XGBoostModel(config=self.config.models.xgb_params)
+        # Create model based on config
         num_classes = len(np.unique(y))
-        model.build_model(num_classes=num_classes)
+        model = self.create_model(num_classes)
         
         # Train
         results = self.train(
