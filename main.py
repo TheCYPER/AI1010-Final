@@ -116,6 +116,27 @@ def run_hyperparameter_tuning(config: Config):
     
     # Build and fit preprocessor
     trainer.build_preprocessor(X_train)
+    # 对于 TabNet，使用简化的特征工程
+    model_type = "tabnet" if config.models.model_type.lower() == "tabnet" else "tree"
+    from feature_engineering import build_preprocessor
+    from data_cleaning import infer_column_types
+    
+    # 重新构建 preprocessor（确保使用正确的 model_type）
+    num_cols, cat_cols = infer_column_types(
+        pd.concat([X_train, pd.Series(y_train, name=config.columns.target)], axis=1),
+        config.columns.target
+    )
+    trainer.preprocessor_ = build_preprocessor(
+        num_cols=num_cols,
+        cat_cols=cat_cols,
+        drop_cols=config.columns.drop_columns,
+        freq_encoding_cols=config.features.freq_encoding_cols,
+        target_encoding_cols=config.features.target_encoding_cols,
+        target_encoding_alpha=config.features.target_encoding_alpha,
+        business_missing_col=config.columns.business_missing_col,
+        log_transform_cols=config.features.log_transform_cols,
+        model_type=model_type
+    )
     X_train_transformed = trainer.preprocessor_.fit_transform(X_train, y_train)
     
     # Run tuning

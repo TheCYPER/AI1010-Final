@@ -8,7 +8,7 @@ from typing import List
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 from .encoders import FrequencyEncoder, MultiClassTargetEncoder
 from .wide_features import WideFeatureBuilder
@@ -26,7 +26,8 @@ def build_preprocessor(
     business_missing_col: str = "ConferenceRoomQuality",
     use_wide_features: bool = True,
     use_statistical_aggregation: bool = True,
-    log_transform_cols: List[str] = None
+    log_transform_cols: List[str] = None,
+    model_type: str = "tree"  # "tree" or "tabnet" - TabNet 需要简化特征工程
 ) -> ColumnTransformer:
     """
     Build a comprehensive preprocessing pipeline.
@@ -42,6 +43,7 @@ def build_preprocessor(
         use_wide_features: Whether to include wide feature builder
         use_statistical_aggregation: Whether to include statistical aggregation
         log_transform_cols: Columns to log-transform
+        model_type: Model type ("tree" or "tabnet") - TabNet 需要简化特征工程
     
     Returns:
         ColumnTransformer pipeline
@@ -101,6 +103,10 @@ def build_preprocessor(
             ))
         )
     
+    # Add StandardScaler for TabNet (深度学习模型需要标准化)
+    # 注意：对于树模型（XGBoost等），标准化不是必需的，但不会有害
+    num_pipe_steps.append(("scaler", StandardScaler()))
+    
     num_pipe = Pipeline(steps=num_pipe_steps)
     
     # Build categorical pipeline
@@ -123,7 +129,9 @@ def build_preprocessor(
         )
     
     # Wide features
-    if use_wide_features:
+    # TabNet 不需要太多手工特征，它能自动学习特征交互
+    # 对于 TabNet，建议关闭 wide features 和 statistical aggregation
+    if use_wide_features and model_type != "tabnet":
         wide_needed = [
             "YearListed", "ConstructionYear", "RenovationYear",
             "GroundFloorArea", "UpperFloorArea", "BasementArea",
@@ -155,7 +163,8 @@ def build_preprocessor(
         transformers.append(("target_enc", te_pipe, target_encoding_cols))
     
     # Statistical aggregation
-    if use_statistical_aggregation:
+    # TabNet 不需要统计聚合特征
+    if use_statistical_aggregation and model_type != "tabnet":
         agg_input_cols = list(set([
             'ZoningClassification', 'BuildingType',
             'GroundFloorArea', 'UpperFloorArea',

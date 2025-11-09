@@ -66,6 +66,18 @@ class TabNetModel(BaseModel):
         # Only use model architecture params (not training params starting with _)
         model_params = {k: v for k, v in self.config.items() if not k.startswith('_')}
         
+        # TabNet 的学习率在初始化时设置，不是在 fit 时
+        # 将 _lr 转换为 optimizer_params
+        if '_lr' in self.config:
+            # TabNet 使用 optimizer_params 字典来设置学习率
+            if 'optimizer_params' not in model_params:
+                model_params['optimizer_params'] = {}
+            model_params['optimizer_params']['lr'] = self.config['_lr']
+        elif 'lr' in self.config:
+            if 'optimizer_params' not in model_params:
+                model_params['optimizer_params'] = {}
+            model_params['optimizer_params']['lr'] = self.config['lr']
+        
         # Merge with kwargs
         model_params = {**model_params, **kwargs}
         
@@ -124,6 +136,9 @@ class TabNetModel(BaseModel):
             
         if 'batch_size' in self.training_params_:
             fit_kwargs['batch_size'] = self.training_params_['batch_size']
+        
+        # TabNet 的学习率在初始化时设置（通过 optimizer_params），不在 fit 时设置
+        # 所以这里不需要传递 learning_rate
         
         # TabNet uses eval_set parameter
         if eval_set is not None:

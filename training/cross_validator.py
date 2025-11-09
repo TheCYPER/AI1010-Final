@@ -139,6 +139,9 @@ class CrossValidator:
         
         from feature_engineering import build_preprocessor
         
+        # Determine model type for feature engineering
+        model_type = "tabnet" if self.config.models.model_type.lower() == "tabnet" else "tree"
+        
         # Build preprocessor
         preprocessor = build_preprocessor(
             num_cols=num_cols,
@@ -148,7 +151,8 @@ class CrossValidator:
             target_encoding_cols=self.config.features.target_encoding_cols,
             target_encoding_alpha=self.config.features.target_encoding_alpha,
             business_missing_col=self.config.columns.business_missing_col,
-            log_transform_cols=self.config.features.log_transform_cols
+            log_transform_cols=self.config.features.log_transform_cols,
+            model_type=model_type  # 为 TabNet 简化特征工程
         )
         
         # Fit preprocessor

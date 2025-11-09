@@ -80,7 +80,7 @@ class ModelConfig:
         'random_seed': 42,
         'loss_function': 'MultiClass',
         'eval_metric': 'MultiClass',
-        'task_type': 'CPU',  # 'GPU' if you have GPU
+        'task_type': 'GPU',  # 'GPU' if you have GPU
         'verbose': False,
         'allow_writing_files': False,  # 不生成中间文件
     })
@@ -106,25 +106,29 @@ class ModelConfig:
     })
 
     # TabNet parameters (深度学习模型)
+    # TabNet 优化建议：
+    # 1. 使用标准化输入（已在 preprocessor 中添加）
+    # 2. 简化特征工程（TabNet 能自动学习特征交互）
+    # 3. 适当的学习率和训练轮数
     tabnet_params: Dict[str, Any] = field(default_factory=lambda: {
         # 模型架构参数（传给 TabNetClassifier.__init__）
-        'n_d': 64,                  # 决策层维度
-        'n_a': 64,                  # 注意力层维度
-        'n_steps': 5,               # 决策步数（类似树的深度）
-        'gamma': 1.5,               # 特征选择的松弛因子
+        'n_d': 16,                  # 决策层维度（降低以减少过拟合）
+        'n_a': 16,                  # 注意力层维度（降低以减少过拟合）
+        'n_steps': 5,               # 决策步数（降低以减少过拟合，5-7 通常较好）
+        'gamma': 1.3,               # 特征选择的松弛因子（降低以减少过拟合）
         'n_independent': 2,         # 独立的 GLU 层数
         'n_shared': 2,              # 共享的 GLU 层数
-        'lambda_sparse': 1e-4,      # 稀疏正则化
+        'lambda_sparse': 1e-3,      # 稀疏正则化（降低以允许更多特征）
         'momentum': 0.3,            # Batch normalization 动量
         'clip_value': 2.0,          # 梯度裁剪
         'mask_type': 'entmax',      # 掩码类型: 'sparsemax' 或 'entmax'
         'seed': 42,
         'verbose': 0,
         # 训练参数（传给 fit() 方法，需要单独处理）
-        '_max_epochs': 100,         # 最大训练轮数
-        '_batch_size': 256,         # 批大小
-        '_patience': 20,            # 早停轮数
-        '_lr': 2e-2,               # 学习率
+        '_max_epochs': 250,         # 增加训练轮数（TabNet 需要更多训练）
+        '_batch_size': 512,         # 增加批大小（提高稳定性）
+        '_patience': 30,            # 增加早停轮数（给模型更多机会）
+        '_lr': 0.01,               # 学习率（0.01-0.02 通常较好）
     })
     
     # RandomForest parameters (for ensemble)
