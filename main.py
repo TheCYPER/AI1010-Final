@@ -31,6 +31,7 @@ from pathlib import Path
 
 from configs import Config
 from utils.logger import setup_logger
+import pandas as pd
 
 # Setup logger
 logger = setup_logger(

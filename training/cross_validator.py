@@ -59,10 +59,43 @@ class CrossValidator:
         elif model_type == "tabnet":
             from modeling.tabnet_model import TabNetModel
             model = TabNetModel(config=self.config.models.tabnet_params)
+        elif model_type == "mlp":
+            from modeling.mlp_model import MLPModel
+            model = MLPModel(config=self.config.models.mlp_params)
+        elif model_type == "knn":
+            from modeling.knn_model import KNNModel
+            model = KNNModel(config=self.config.models.knn_params)
+        elif model_type == "logistic":
+            from modeling.logistic_model import LogisticRegressionModel
+            model = LogisticRegressionModel(config=self.config.models.logistic_params)
+        elif model_type == "svm":
+            from modeling.svm_model import SVMModel
+            model = SVMModel(config=self.config.models.svm_params)
+        elif model_type == "naive_bayes":
+            from modeling.naive_bayes_model import NaiveBayesModel
+            model = NaiveBayesModel(config=self.config.models.naive_bayes_params)
+        elif model_type == "ridge":
+            from modeling.ridge_model import RidgeModel
+            model = RidgeModel(config=self.config.models.ridge_params)
+        elif model_type == "extra_trees":
+            from modeling.extra_trees_model import ExtraTreesModel
+            model = ExtraTreesModel(config=self.config.models.extra_trees_params)
+        elif model_type == "ensemble":
+            from modeling.ensemble import create_full_ensemble
+            model = create_full_ensemble(
+                model_config=self.config.models,
+                num_classes=num_classes,
+                ensemble_type='voting',
+                voting='soft'
+            )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
         
-        model.build_model(num_classes=num_classes)
+        if model_type != "ensemble":
+            model.build_model(num_classes=num_classes)
+        else:
+            model.build_model(num_classes=num_classes)
+        
         return model
     
     def load_data(self) -> Tuple[pd.DataFrame, pd.Series]:

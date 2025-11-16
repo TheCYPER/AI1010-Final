@@ -315,10 +315,55 @@ class Trainer:
             from modeling.tabnet_model import TabNetModel
             model = TabNetModel(config=self.config.models.tabnet_params)
             logger.info("Using TabNet model (Deep Learning)")
+        elif model_type == "mlp":
+            from modeling.mlp_model import MLPModel
+            model = MLPModel(config=self.config.models.mlp_params)
+            logger.info("Using MLP model (Neural Network)")
+        elif model_type == "knn":
+            from modeling.knn_model import KNNModel
+            model = KNNModel(config=self.config.models.knn_params)
+            logger.info("Using KNN model")
+        elif model_type == "logistic":
+            from modeling.logistic_model import LogisticRegressionModel
+            model = LogisticRegressionModel(config=self.config.models.logistic_params)
+            logger.info("Using Logistic Regression model")
+        elif model_type == "svm":
+            from modeling.svm_model import SVMModel
+            model = SVMModel(config=self.config.models.svm_params)
+            logger.info("Using SVM model")
+        elif model_type == "naive_bayes":
+            from modeling.naive_bayes_model import NaiveBayesModel
+            model = NaiveBayesModel(config=self.config.models.naive_bayes_params)
+            logger.info("Using Naive Bayes model")
+        elif model_type == "ridge":
+            from modeling.ridge_model import RidgeModel
+            model = RidgeModel(config=self.config.models.ridge_params)
+            logger.info("Using Ridge Classifier model")
+        elif model_type == "extra_trees":
+            from modeling.extra_trees_model import ExtraTreesModel
+            model = ExtraTreesModel(config=self.config.models.extra_trees_params)
+            logger.info("Using Extra Trees model")
+        elif model_type == "ensemble":
+            from modeling.ensemble import create_full_ensemble
+            # 创建包含所有模型的ensemble
+            model = create_full_ensemble(
+                model_config=self.config.models,
+                num_classes=num_classes,
+                ensemble_type='voting',  # 可以从config中读取
+                voting='soft'  # 可以从config中读取
+            )
+            logger.info("Using Ensemble model (combining all models)")
         else:
             raise ValueError(f"Unknown model type: {model_type}")
         
-        model.build_model(num_classes=num_classes)
+        # 只有非ensemble模型需要build_model
+        if model_type != "ensemble":
+            model.build_model(num_classes=num_classes)
+        else:
+            # ensemble模型在create_full_ensemble中已经build了base models
+            # 但还需要build ensemble本身
+            model.build_model(num_classes=num_classes)
+        
         return model
     
     def run(self) -> Dict[str, Any]:

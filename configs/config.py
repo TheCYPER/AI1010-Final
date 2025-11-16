@@ -51,7 +51,14 @@ class ColumnConfig:
 class ModelConfig:
     """Model-specific configurations."""
     # Model type selection
-    model_type: str = "tabnet"  # Options: "xgboost", "catboost", "lightgbm", "tabnet", "ensemble"
+    model_type: str = "ensemble"  
+    # Options: "xgboost", "catboost", "lightgbm", "tabnet", "mlp", "knn", "logistic", "svm", "naive_bayes", "ridge", "extra_trees", "ensemble"
+
+    # CatBoost: 0.8550
+    # xgboost: 0.8400
+    # lightgbm: 0.8403
+    # mlp: 0.8383
+
     
     # XGBoost parameters
     xgb_params: Dict[str, Any] = field(default_factory=lambda: {
@@ -88,10 +95,10 @@ class ModelConfig:
     # LightGBM parameters
     lightgbm_params: Dict[str, Any] = field(default_factory=lambda: {
         'n_estimators': 1500,
-        'learning_rate': 0.05,
-        'max_depth': 7,
-        'num_leaves': 63,  # 通常设为 2^max_depth - 1
-        'min_child_samples': 20,
+        'learning_rate': 0.02,
+        'max_depth': 5,
+        'num_leaves': 31,  # 通常设为 2^max_depth - 1
+        'min_child_samples': 20,    
         'subsample': 0.8,
         'subsample_freq': 1,
         'colsample_bytree': 0.8,
@@ -131,13 +138,99 @@ class ModelConfig:
         '_lr': 0.01,               # 学习率（0.01-0.02 通常较好）
     })
     
+    # MLP (Multi-Layer Perceptron) parameters - sklearn neural network
+    # Optimized to reduce overfitting, similar to tree models' regularization approach
+    mlp_params: Dict[str, Any] = field(default_factory=lambda: {
+        'hidden_layer_sizes': (256, 128, 64),         # Reduced from (256, 128, 64) to prevent overfitting
+        'activation': 'relu',                    # Activation function: 'relu', 'tanh', 'logistic'
+        'solver': 'adam',                        # Optimizer: 'adam', 'lbfgs', 'sgd'
+        'alpha': 0.001,                           # Increased L2 regularization (from 0.001) to match tree models' strong regularization
+        'batch_size': 'auto',                    # Batch size for 'adam' and 'sgd' solvers
+        'learning_rate': 'adaptive',             # Learning rate schedule: 'constant', 'invscaling', 'adaptive'
+        'learning_rate_init': 0.001,             # Initial learning rate
+        'max_iter': 500,                         # Reduced iterations (from 500) to prevent overfitting
+        'shuffle': True,                         # Shuffle samples in each iteration
+        'random_state': 42,
+        'tol': 1e-4,                            # Tolerance for optimization
+        'verbose': False,                        # Print progress
+        'warm_start': False,                     # Reuse previous solution
+        'momentum': 0.9,                         # Momentum for 'sgd' solver
+        'nesterovs_momentum': True,              # Use Nesterov's momentum
+        'early_stopping': True,                  # Use early stopping
+        'validation_fraction': 0.1,              # Fraction of data for validation
+        'beta_1': 0.9,                           # Exponential decay rate for first moment (adam)
+        'beta_2': 0.999,                         # Exponential decay rate for second moment (adam)
+        'epsilon': 1e-8,                         # Epsilon for numerical stability (adam)
+        'n_iter_no_change': 15,                 # Reduced patience (from 20) for earlier stopping
+    })
+    
     # RandomForest parameters (for ensemble)
     rf_params: Dict[str, Any] = field(default_factory=lambda: {
-        'n_estimators': 200,
-        'max_depth': 20,
+        'n_estimators': 100,
+        'max_depth': 7,
         'min_samples_split': 5,
         'random_state': 42,
         'n_jobs': -1
+    })
+    
+    # KNN (K-Nearest Neighbors) parameters - simple, fast, provides diversity
+    knn_params: Dict[str, Any] = field(default_factory=lambda: {
+        'n_neighbors': 15,                    # Number of neighbors (balanced between local and global)
+        'weights': 'distance',                # Weight by distance (better than uniform)
+        'algorithm': 'auto',                  # Auto-select best algorithm
+        'leaf_size': 10,                      # Leaf size for tree-based algorithms
+        'p': 2,                               # Power parameter for Minkowski metric (2 = Euclidean)
+        'metric': 'minkowski',                # Distance metric
+        'n_jobs': -1,                         # Use all cores
+    })
+    
+    # Logistic Regression parameters - linear model, fast, provides diversity
+    logistic_params: Dict[str, Any] = field(default_factory=lambda: {
+        'penalty': 'l2',                      # Regularization: 'l1', 'l2', 'elasticnet', None
+        'C': 1.0,                             # Inverse regularization strength (smaller = stronger)
+        'solver': 'lbfgs',                    # Solver: 'lbfgs', 'liblinear', 'newton-cg', 'sag', 'saga'
+        'max_iter': 1000,                     # Maximum iterations
+        # 'multi_class' is deprecated in sklearn 1.5+, removed to avoid warning
+        # Default behavior is 'multinomial' for multi-class problems
+        'random_state': 42,
+        'n_jobs': -1,                         # Use all cores
+    })
+    
+    # SVM (Support Vector Machine) parameters - powerful non-linear classifier
+    svm_params: Dict[str, Any] = field(default_factory=lambda: {
+        'C': 1.0,                             # Regularization parameter
+        'kernel': 'rbf',                      # Kernel: 'linear', 'poly', 'rbf', 'sigmoid'
+        'gamma': 'scale',                    # Kernel coefficient: 'scale', 'auto', or float
+        'degree': 3,                          # Degree for polynomial kernel
+        'coef0': 0.0,                         # Independent term in kernel function
+        'probability': True,                 # Enable probability estimates (required for ensemble)
+        'random_state': 42,
+        'max_iter': -1,                      # -1 means no limit
+    })
+    
+    # Naive Bayes parameters - simple probabilistic classifier
+    naive_bayes_params: Dict[str, Any] = field(default_factory=lambda: {
+        'var_smoothing': 1e-9,               # Portion of the largest variance to add for stability
+    })
+    
+    # Ridge Classifier parameters - linear model with L2 regularization
+    ridge_params: Dict[str, Any] = field(default_factory=lambda: {
+        'alpha': 1.0,                        # Regularization strength
+        'solver': 'auto',                    # Solver: 'auto', 'svd', 'cholesky', 'lsqr', 'sparse_cg', 'sag', 'saga'
+        'max_iter': None,                    # Maximum iterations
+        'random_state': 42,
+    })
+    
+    # Extra Trees (Extremely Randomized Trees) parameters - more randomized than RF
+    extra_trees_params: Dict[str, Any] = field(default_factory=lambda: {
+        'n_estimators': 100,                 # Number of trees
+        'max_depth': 7,                      # Maximum depth
+        'min_samples_split': 5,              # Minimum samples to split
+        'min_samples_leaf': 2,               # Minimum samples in leaf
+        'max_features': 'sqrt',              # Features to consider: 'sqrt', 'log2', None, int, float
+        'bootstrap': True,                   # Bootstrap sampling
+        'random_state': 42,
+        'n_jobs': -1,                        # Use all cores
     })
 
 

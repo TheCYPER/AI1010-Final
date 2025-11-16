@@ -78,6 +78,20 @@ class TabNetModel(BaseModel):
                 model_params['optimizer_params'] = {}
             model_params['optimizer_params']['lr'] = self.config['lr']
         
+        # Check for GPU availability and set device
+        # Note: In WSL2, GPU access might have issues, so we'll try GPU first but can fallback
+        try:
+            import torch
+            if torch.cuda.is_available():
+                # Use GPU if available
+                if 'device_name' not in model_params:
+                    # Try GPU, but TabNet should handle fallback if there are issues
+                    model_params['device_name'] = 'cuda'
+        except (ImportError, Exception):
+            # If there's any issue with GPU detection, use CPU
+            if 'device_name' not in model_params:
+                model_params['device_name'] = 'cpu'
+        
         # Merge with kwargs
         model_params = {**model_params, **kwargs}
         
@@ -161,8 +175,25 @@ class TabNetModel(BaseModel):
         elif 'patience' in self.training_params_:
             fit_kwargs['patience'] = self.training_params_['patience']
         
+        # Remove 'verbose' from kwargs as TabNet's fit() doesn't accept it
+        # Verbosity is controlled during model initialization
+        kwargs_clean = {k: v for k, v in kwargs.items() if k != 'verbose'}
+        
         # Merge additional kwargs
-        fit_kwargs.update(kwargs)
+        fit_kwargs.update(kwargs_clean)
+        
+        # Log before training starts
+        from utils.logger import get_logger
+        logger = get_logger(__name__)
+        logger.info(f"Starting TabNet training with {len(X)} samples, {X.shape[1]} features")
+        try:
+            import torch
+            if torch.cuda.is_available():
+                logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+            else:
+                logger.info("Using CPU (GPU not available)")
+        except:
+            pass
         
         # Fit
         self.model_.fit(**fit_kwargs)

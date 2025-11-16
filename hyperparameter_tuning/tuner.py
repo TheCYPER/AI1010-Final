@@ -93,13 +93,84 @@ class OptunaTuner(HyperparameterTuner):
         super().__init__(config)
         self.study_ = None
     
+    def _get_search_space_for_model(self, model_type: str):
+        """
+        Get search space configuration for specific model type.
+        
+        Args:
+            model_type: Model type ('xgboost', 'catboost', 'lightgbm', 'mlp')
+        
+        Returns:
+            Search space dictionary
+        """
+        # Default XGBoost search space (backward compatible)
+        default_space = self.config.tuning.search_space
+        
+        # Model-specific search spaces
+        search_spaces = {
+            'xgboost': default_space,
+            'catboost': {
+                'iterations': (500, 2000),
+                'learning_rate': (0.01, 0.1),
+                'depth': (4, 10),
+                'l2_leaf_reg': (1.0, 20.0),
+            },
+            'lightgbm': {
+                'n_estimators': (500, 2000),
+                'learning_rate': (0.01, 0.1),
+                'max_depth': (3, 10),
+                'num_leaves': (15, 127),
+                'min_child_samples': (10, 50),
+                'subsample': (0.5, 1.0),
+                'colsample_bytree': (0.5, 1.0),
+                'reg_alpha': (0, 10),
+                'reg_lambda': (0, 20),
+            },
+            'mlp': {
+                'hidden_layer_sizes': [(64,), (128,), (64, 32), (128, 64), (128, 64, 32)],
+                'alpha': (0.0001, 0.1),
+                'learning_rate_init': (0.0001, 0.01),
+                'max_iter': (100, 500),
+            }
+        }
+        
+        return search_spaces.get(model_type, default_space)
+    
+    def _sample_params(self, trial, model_type: str, search_space: Dict):
+        """
+        Sample hyperparameters from search space.
+        
+        Args:
+            trial: Optuna trial object
+            model_type: Model type
+            search_space: Search space dictionary
+        
+        Returns:
+            Sampled parameters dictionary
+        """
+        params = {}
+        
+        for param_name, param_range in search_space.items():
+            if param_name == 'hidden_layer_sizes' and isinstance(param_range, list):
+                # Special handling for hidden_layer_sizes (categorical)
+                params[param_name] = trial.suggest_categorical(param_name, param_range)
+            elif isinstance(param_range, tuple) and len(param_range) == 2:
+                # Float or int range
+                if isinstance(param_range[0], int) and isinstance(param_range[1], int):
+                    params[param_name] = trial.suggest_int(param_name, *param_range)
+                else:
+                    params[param_name] = trial.suggest_float(param_name, *param_range)
+        
+        return params
+    
     def _objective(
         self,
         trial,
         X,
         y,
         preprocessor,
-        model_builder
+        model_builder,
+        model_type: str = 'xgboost'
     ):
         """
         Objective function for Optuna.
@@ -110,52 +181,31 @@ class OptunaTuner(HyperparameterTuner):
             y: Target
             preprocessor: Preprocessor
             model_builder: Model builder function
+            model_type: Model type to tune
         
         Returns:
             Score to maximize
         """
-        from modeling import XGBoostModel
+        # Get search space for model type
+        search_space = self._get_search_space_for_model(model_type)
         
         # Sample hyperparameters
-        search_space = self.config.tuning.search_space
+        params = self._sample_params(trial, model_type, search_space)
         
-        params = {
-            'learning_rate': trial.suggest_float(
-                'learning_rate',
-                *search_space['learning_rate']
-            ),
-            'max_depth': trial.suggest_int(
-                'max_depth',
-                *search_space['max_depth']
-            ),
-            'min_child_weight': trial.suggest_int(
-                'min_child_weight',
-                *search_space['min_child_weight']
-            ),
-            'subsample': trial.suggest_float(
-                'subsample',
-                *search_space['subsample']
-            ),
-            'colsample_bytree': trial.suggest_float(
-                'colsample_bytree',
-                *search_space['colsample_bytree']
-            ),
-            'gamma': trial.suggest_float(
-                'gamma',
-                *search_space['gamma']
-            ),
-            'reg_alpha': trial.suggest_float(
-                'reg_alpha',
-                *search_space['reg_alpha']
-            ),
-            'reg_lambda': trial.suggest_float(
-                'reg_lambda',
-                *search_space['reg_lambda']
-            )
-        }
+        # Get base parameters for model type
+        if model_type == 'xgboost':
+            base_params = self.config.models.xgb_params.copy()
+        elif model_type == 'catboost':
+            base_params = self.config.models.catboost_params.copy()
+        elif model_type == 'lightgbm':
+            base_params = self.config.models.lightgbm_params.copy()
+        elif model_type == 'mlp':
+            base_params = self.config.models.mlp_params.copy()
+        else:
+            base_params = {}
         
-        # Add base parameters
-        full_params = {**self.config.models.xgb_params, **params}
+        # Merge sampled params with base params (sampled params override base)
+        full_params = {**base_params, **params}
         
         # Build model
         model = model_builder(full_params)
@@ -188,7 +238,8 @@ class OptunaTuner(HyperparameterTuner):
         X: pd.DataFrame,
         y: pd.Series,
         preprocessor,
-        model_builder: Optional[Callable] = None
+        model_builder: Optional[Callable] = None,
+        model_type: str = 'xgboost'
     ) -> Dict[str, Any]:
         """
         Run Optuna hyperparameter tuning.
@@ -198,6 +249,7 @@ class OptunaTuner(HyperparameterTuner):
             y: Target
             preprocessor: Fitted preprocessor
             model_builder: Function to build model (optional)
+            model_type: Model type to tune ('xgboost', 'catboost', 'lightgbm', 'mlp')
         
         Returns:
             Best parameters and score
@@ -210,26 +262,46 @@ class OptunaTuner(HyperparameterTuner):
             raise
         
         logger.info("="*70)
-        logger.info("STARTING HYPERPARAMETER TUNING (OPTUNA)")
+        logger.info(f"STARTING HYPERPARAMETER TUNING (OPTUNA) - {model_type.upper()}")
         logger.info("="*70)
         
-        # Default model builder
+        # Default model builder based on model type
         if model_builder is None:
-            from modeling import XGBoostModel
-            model_builder = lambda params: XGBoostModel(config=params)
+            if model_type == 'xgboost':
+                from modeling import XGBoostModel
+                model_builder = lambda params: XGBoostModel(config=params)
+            elif model_type == 'catboost':
+                from modeling.catboost_model import CatBoostModel
+                model_builder = lambda params: CatBoostModel(config=params)
+            elif model_type == 'lightgbm':
+                from modeling.lightgbm_model import LightGBMModel
+                model_builder = lambda params: LightGBMModel(config=params)
+            elif model_type == 'mlp':
+                from modeling.mlp_model import MLPModel
+                model_builder = lambda params: MLPModel(config=params)
+            else:
+                from modeling import XGBoostModel
+                model_builder = lambda params: XGBoostModel(config=params)
+                logger.warning(f"Unknown model type {model_type}, defaulting to XGBoost")
         
-        # Create study
-        self.study_ = optuna.create_study(
-            direction='maximize',
-            study_name='xgboost_tuning'
-        )
+        # Create study with TPE sampler for better optimization
+        try:
+            import optuna
+            self.study_ = optuna.create_study(
+                direction='maximize',
+                study_name=f'{model_type}_tuning',
+                sampler=optuna.samplers.TPESampler(seed=self.config.training.random_state)
+            )
+        except ImportError:
+            logger.error("Optuna not installed. Install with: pip install optuna")
+            raise
         
         # Run optimization
-        logger.info(f"Running {self.config.tuning.n_trials} trials...")
+        logger.info(f"Running {self.config.tuning.n_trials} trials for {model_type}...")
         
         self.study_.optimize(
             lambda trial: self._objective(
-                trial, X, y, preprocessor, model_builder
+                trial, X, y, preprocessor, model_builder, model_type
             ),
             n_trials=self.config.tuning.n_trials,
             timeout=self.config.tuning.timeout,
