@@ -327,7 +327,7 @@ def create_full_ensemble(
     # Can customize: include_models=['xgb', 'catboost', 'lightgbm', 'rf', 'mlp', 'svm', 'naive_bayes', 'ridge', 'extra_trees', 'tabnet']
     if include_models is None:
         # Include strong models: tree-based + MLP + diverse non-tree models
-        include_models = ['xgb', 'catboost', 'lightgbm', 'rf', 'extra_trees', 'mlp', 'svm', 'ridge', 'naive_bayes']
+        include_models = ['xgb', 'catboost', 'lightgbm', 'rf', 'mlp']
     
     ensemble = EnsembleModel(ensemble_type=ensemble_type, voting=voting)
     

@@ -4,7 +4,7 @@ Miscellaneous transformers.
 
 import numpy as np
 import pandas as pd
-from typing import Sequence, Optional
+from typing import Sequence, Optional, List
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import FunctionTransformer
 
@@ -130,4 +130,159 @@ class BusinessMissingIndicator(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, input_features=None):
         """Get output feature names."""
         return np.array(["business_missing_indicator"])
+
+
+class KNNImputerWithIndicators(BaseEstimator, TransformerMixin):
+    """
+    Combined transformer that performs KNN imputation and adds missing indicators.
+    
+    This wraps KNNImputer and adds missing value indicators, since KNNImputer
+    doesn't support add_indicator directly.
+    """
+    
+    def __init__(self, n_neighbors: int = 5, weights: str = 'uniform', col_names: List[str] = None):
+        """
+        Initialize KNN imputer with indicators.
+        
+        Args:
+            n_neighbors: Number of neighbors for KNN imputation
+            weights: Weight function for KNN ('uniform' or 'distance')
+            col_names: Column names for creating indicator feature names
+        """
+        from sklearn.impute import KNNImputer
+        self.n_neighbors = n_neighbors
+        self.weights = weights
+        self.col_names = col_names or []
+        self.imputer_ = KNNImputer(n_neighbors=n_neighbors, weights=weights)
+        self.missing_mask_ = None
+        self.n_features_in_ = None
+    
+    def fit(self, X, y=None):
+        """
+        Fit by storing missing pattern and fitting KNN imputer.
+        
+        Args:
+            X: Input data (numpy array)
+            y: Target (unused)
+        
+        Returns:
+            self
+        """
+        X = np.asarray(X)
+        self.n_features_in_ = X.shape[1]
+        
+        # Store missing pattern (before imputation)
+        self.missing_mask_ = np.isnan(X)
+        
+        # Fit KNN imputer
+        self.imputer_.fit(X)
+        
+        return self
+    
+    def transform(self, X):
+        """
+        Transform by imputing and appending missing indicators.
+        
+        Args:
+            X: Input data (numpy array)
+        
+        Returns:
+            Array with imputed features + missing indicators
+        """
+        X = np.asarray(X)
+        
+        # Get missing indicators (from fit time for training, current for test)
+        if self.missing_mask_ is not None and X.shape[0] == self.missing_mask_.shape[0]:
+            # Training data: use stored missing pattern
+            missing_indicators = self.missing_mask_.astype(int)
+        else:
+            # Test data: use current missing pattern
+            missing_indicators = np.isnan(X).astype(int)
+        
+        # Impute missing values
+        X_imputed = self.imputer_.transform(X)
+        
+        # Combine imputed values and indicators
+        X_with_indicators = np.hstack([X_imputed, missing_indicators])
+        
+        return X_with_indicators
+    
+    def get_feature_names_out(self, input_features=None):
+        """Get output feature names."""
+        if input_features is None:
+            input_features = [f"feature_{i}" for i in range(self.n_features_in_)]
+        
+        output_names = list(input_features) + [f"{col}_missing" for col in self.col_names]
+        return np.array(output_names)
+
+
+class MissingIndicatorTransformer(BaseEstimator, TransformerMixin):
+    """
+    Transformer to add missing value indicators for numeric columns.
+    
+    This is used with KNNImputer, which doesn't support add_indicator directly.
+    The transformer stores the missing pattern during fit and adds indicators during transform.
+    """
+    
+    def __init__(self, col_names: List[str]):
+        """
+        Initialize missing indicator transformer.
+        
+        Args:
+            col_names: List of column names to create indicators for
+        """
+        self.col_names = col_names
+        self.n_features_in_ = None
+        self.missing_mask_ = None
+    
+    def fit(self, X, y=None):
+        """
+        Fit by storing the missing pattern.
+        
+        Args:
+            X: Input data (numpy array)
+            y: Target (unused)
+        
+        Returns:
+            self
+        """
+        X = np.asarray(X)
+        self.n_features_in_ = X.shape[1]
+        
+        # Store missing pattern (before imputation)
+        self.missing_mask_ = np.isnan(X)
+        
+        return self
+    
+    def transform(self, X):
+        """
+        Transform by appending missing indicators.
+        
+        Args:
+            X: Input data (numpy array, already imputed)
+        
+        Returns:
+            Array with original features + missing indicators
+        """
+        X = np.asarray(X)
+        
+        # Get missing indicators (from fit time)
+        if self.missing_mask_ is not None:
+            missing_indicators = self.missing_mask_.astype(int)
+            # Combine imputed values and indicators
+            X_with_indicators = np.hstack([X, missing_indicators])
+        else:
+            # Fallback: check current missing values
+            missing_indicators = np.isnan(X).astype(int)
+            X_with_indicators = np.hstack([X, missing_indicators])
+        
+        return X_with_indicators
+    
+    def get_feature_names_out(self, input_features=None):
+        """Get output feature names."""
+        if input_features is None:
+            input_features = [f"feature_{i}" for i in range(self.n_features_in_)]
+        
+        output_names = list(input_features) + [f"{col}_missing" for col in self.col_names]
+        return np.array(output_names)
 

@@ -121,8 +121,14 @@ class Trainer:
         logger.info(f"Numeric features: {len(num_cols)}")
         logger.info(f"Categorical features: {len(cat_cols)}")
         
-        # Determine model type for feature engineering
-        model_type = "tabnet" if self.config.models.model_type.lower() == "tabnet" else "tree"
+        # Determine model type for feature engineering and scaler selection
+        # For TabNet, use "tabnet" to simplify feature engineering
+        # For other models, pass the actual model type for scaler selection
+        actual_model_type = self.config.models.model_type.lower()
+        if actual_model_type == "tabnet":
+            model_type = "tabnet"  # TabNet needs simplified feature engineering
+        else:
+            model_type = actual_model_type  # Pass actual model type for scaler selection
         
         # Build preprocessor
         self.preprocessor_ = build_preprocessor(
@@ -134,7 +140,7 @@ class Trainer:
             target_encoding_alpha=self.config.features.target_encoding_alpha,
             business_missing_col=self.config.columns.business_missing_col,
             log_transform_cols=self.config.features.log_transform_cols,
-            model_type=model_type  # 为 TabNet 简化特征工程
+            model_type=model_type  # Used for feature engineering and scaler selection
         )
         
         return self.preprocessor_

@@ -8,12 +8,12 @@ from typing import List
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, RobustScaler
 
 from .encoders import FrequencyEncoder, MultiClassTargetEncoder
 from .wide_features import WideFeatureBuilder
 from .statistical_features import StatisticalAggregator
-from .transformers import Log1pTransformer, BusinessMissingIndicator
+from .transformers import Log1pTransformer, BusinessMissingIndicator, KNNImputerWithIndicators
 
 
 def build_preprocessor(
@@ -27,7 +27,9 @@ def build_preprocessor(
     use_wide_features: bool = True,
     use_statistical_aggregation: bool = True,
     log_transform_cols: List[str] = None,
-    model_type: str = "tree"  # "tree" or "tabnet" - TabNet 需要简化特征工程
+    model_type: str = "tree",  # "tree" or "tabnet" - TabNet 需要简化特征工程
+    use_knn_imputation: bool = True,  # Use KNN imputation for numeric columns
+    knn_neighbors: int = 5  # Number of neighbors for KNN imputation
 ) -> ColumnTransformer:
     """
     Build a comprehensive preprocessing pipeline.
@@ -75,8 +77,16 @@ def build_preprocessor(
     num_cols = [c for c in num_cols if c not in drop_cols]
     cat_cols = [c for c in cat_cols if c not in drop_cols]
     
+    # Validate that we have at least some features
+    if not num_cols and not cat_cols:
+        raise ValueError(
+            f"All features were dropped! Please check drop_columns: {drop_cols}. "
+            f"Original num_cols: {len([c for c in num_cols if c not in drop_cols])}, "
+            f"cat_cols: {len([c for c in cat_cols if c not in drop_cols])}"
+        )
+    
     # Ensure business missing column is in categorical
-    if business_missing_col not in num_cols and business_missing_col not in cat_cols:
+    if business_missing_col and business_missing_col not in num_cols and business_missing_col not in cat_cols:
         cat_cols.append(business_missing_col)
     
     # Filter encoding columns
@@ -90,9 +100,20 @@ def build_preprocessor(
     ]
     
     # Build numeric pipeline
-    num_pipe_steps = [
-        ("imputer", SimpleImputer(strategy="median", add_indicator=True))
-    ]
+    # Use KNN imputation for better accuracy (considers feature relationships)
+    if use_knn_imputation:
+        # Create a combined transformer that stores missing pattern, imputes, and adds indicators
+        num_pipe_steps = [
+            ("knn_imputer_with_indicators", KNNImputerWithIndicators(
+                n_neighbors=knn_neighbors,
+                col_names=num_cols
+            ))
+        ]
+    else:
+        # Use SimpleImputer (faster but less accurate)
+        num_pipe_steps = [
+            ("imputer", SimpleImputer(strategy="median", add_indicator=True))
+        ]
     
     # Add log transform if needed
     if any(col in num_cols for col in log_transform_cols):
@@ -103,26 +124,40 @@ def build_preprocessor(
             ))
         )
     
-    # Add StandardScaler for TabNet (深度学习模型需要标准化)
-    # 注意：对于树模型（XGBoost等），标准化不是必需的，但不会有害
-    num_pipe_steps.append(("scaler", StandardScaler()))
+    # Add scaler based on model type
+    # - Linear models (SVM, Ridge, Logistic, MLP, KNN, Naive Bayes): RobustScaler (robust to outliers)
+    # - Tree models (XGBoost, CatBoost, LightGBM, RF): StandardScaler (not required but harmless)
+    # - Deep learning (TabNet): StandardScaler (required for neural networks)
+    # - Ensemble: RobustScaler (contains linear models)
+    linear_models = ['svm', 'ridge', 'logistic', 'mlp', 'knn', 'naive_bayes']
+    if model_type.lower() in linear_models or model_type.lower() == 'ensemble':
+        # Use RobustScaler for linear models (more robust to outliers)
+        num_pipe_steps.append(("scaler", RobustScaler()))
+    else:
+        # Use StandardScaler for tree models and deep learning
+        num_pipe_steps.append(("scaler", StandardScaler()))
     
     num_pipe = Pipeline(steps=num_pipe_steps)
     
-    # Build categorical pipeline
+    # Build categorical pipeline (only if there are categorical columns)
     cat_pipe = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="constant", fill_value="__MISSING__")),
         ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
     ])
     
     # Transformers list
-    transformers = [
-        ("num", num_pipe, num_cols),
-        ("cat", cat_pipe, cat_cols_onehot),
-    ]
+    transformers = []
     
-    # Business missing indicator
-    if business_missing_col:
+    # Only add numeric pipeline if there are numeric columns to process
+    if num_cols:
+        transformers.append(("num", num_pipe, num_cols))
+    
+    # Only add categorical pipeline if there are categorical columns to process
+    if cat_cols_onehot:
+        transformers.append(("cat", cat_pipe, cat_cols_onehot))
+    
+    # Business missing indicator (only if column exists in data)
+    if business_missing_col and business_missing_col in (num_cols + cat_cols):
         crq_missing_tf = BusinessMissingIndicator()
         transformers.append(
             ("crq_missing", crq_missing_tf, [business_missing_col])
@@ -131,6 +166,7 @@ def build_preprocessor(
     # Wide features
     # TabNet 不需要太多手工特征，它能自动学习特征交互
     # 对于 TabNet，建议关闭 wide features 和 statistical aggregation
+    # Note: WideFeatureBuilder should always generate features, but we check input cols exist
     if use_wide_features and model_type != "tabnet":
         wide_needed = [
             "YearListed", "ConstructionYear", "RenovationYear",
@@ -143,20 +179,22 @@ def build_preprocessor(
         ]
         wide_input_cols = [c for c in wide_needed if c in (num_cols + cat_cols)]
         
-        if wide_input_cols:
+        # Only add if we have at least some input columns
+        # WideFeatureBuilder should generate features even if some columns are missing
+        if wide_input_cols and len(wide_input_cols) > 0:
             wide_pipe = Pipeline(steps=[
                 ("builder", WideFeatureBuilder()),
                 ("imputer", SimpleImputer(strategy="median"))
             ])
             transformers.append(("wide_feats", wide_pipe, wide_input_cols))
     
-    # Frequency encoding
-    if freq_encoding_cols:
+    # Frequency encoding (only if columns exist after filtering)
+    if freq_encoding_cols and len(freq_encoding_cols) > 0:
         freq_pipe = Pipeline([("freq", FrequencyEncoder(freq_encoding_cols))])
         transformers.append(("freq_enc", freq_pipe, freq_encoding_cols))
     
-    # Target encoding
-    if target_encoding_cols:
+    # Target encoding (only if columns exist after filtering)
+    if target_encoding_cols and len(target_encoding_cols) > 0:
         te_pipe = Pipeline([
             ("te", MultiClassTargetEncoder(target_encoding_cols, alpha=target_encoding_alpha))
         ])
@@ -164,6 +202,9 @@ def build_preprocessor(
     
     # Statistical aggregation
     # TabNet 不需要统计聚合特征
+    # Note: StatisticalAggregator requires groupby_cols to generate features
+    # If groupby_cols (ZoningClassification, BuildingType) are dropped, it will return empty array
+    # So we only add this pipeline if at least one groupby_col exists
     if use_statistical_aggregation and model_type != "tabnet":
         agg_input_cols = list(set([
             'ZoningClassification', 'BuildingType',
@@ -173,15 +214,30 @@ def build_preprocessor(
             'PlotSize'
         ]) & set(num_cols + cat_cols))
         
-        if agg_input_cols:
+        # Check if groupby columns exist (required for StatisticalAggregator to work)
+        groupby_cols_required = ['ZoningClassification', 'BuildingType']
+        groupby_cols_available = [col for col in groupby_cols_required if col in (num_cols + cat_cols)]
+        
+        # Only add if we have at least one groupby column AND some input columns
+        # StatisticalAggregator needs groupby_cols to generate features
+        if groupby_cols_available and agg_input_cols and len(agg_input_cols) > 0:
             agg_pipe = Pipeline(steps=[
                 ("agg", StatisticalAggregator(
-                    groupby_cols=('ZoningClassification', 'BuildingType'),
+                    groupby_cols=tuple(groupby_cols_available),  # Use available groupby cols
                     agg_cols=('TotalLivingArea', 'BuildingAge', 'OverallQuality')
                 )),
                 ("imputer", SimpleImputer(strategy="median"))
             ])
             transformers.append(("agg_feats", agg_pipe, agg_input_cols))
+    
+    # Validate that we have at least one transformer
+    if not transformers:
+        raise ValueError(
+            "No transformers available! All features may have been dropped. "
+            f"num_cols after filtering: {len(num_cols)}, "
+            f"cat_cols after filtering: {len(cat_cols)}, "
+            f"drop_cols: {drop_cols}"
+        )
     
     # Build final preprocessor
     preprocessor = ColumnTransformer(

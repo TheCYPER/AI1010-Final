@@ -35,12 +35,29 @@ class ColumnConfig:
     numeric: Optional[List[str]] = None
     categorical: Optional[List[str]] = None
     
-    # Columns to drop (low quality/redundant)
+    # Columns to drop (low quality/redundant/severe imbalance)
     drop_columns: List[str] = field(default_factory=lambda: [
         "AlleyAccess",
         "ExteriorFinishType", 
         "RecreationQuality",
-        "MiscellaneousFeature"
+        "MiscellaneousFeature",
+        # Severely imbalanced categorical features
+        "ZoningClassification",
+        "StreetType",
+        "LandFlatness",
+        "UtilitiesAvailable",
+        "PlotConfiguration",
+        "PlotSlope",
+        "Proximity1",
+        "Proximity2",
+        "BuildingType",
+        "FunctionalityRating",
+        "ParkingType",
+        "ParkingQuality",
+        "ParkingCondition",
+        "PavedAccess",
+        "ListingType",
+        "ListingCondition"
     ])
     
     # Business missing column
@@ -64,8 +81,8 @@ class ModelConfig:
     xgb_params: Dict[str, Any] = field(default_factory=lambda: {
         'objective': 'multi:softprob',
         'n_estimators': 1500,
-        'learning_rate': 0.06,
-        'max_depth': 4,
+        'learning_rate': 0.01,
+        'max_depth': 7,
         'gamma': 1.0,
         'min_child_weight': 10,
         'subsample': 0.75,
@@ -81,7 +98,7 @@ class ModelConfig:
     # CatBoost parameters
     catboost_params: Dict[str, Any] = field(default_factory=lambda: {
         'iterations': 1700,
-        'learning_rate': 0.03,
+        'learning_rate': 0.01,
         'depth': 7,
         'l2_leaf_reg': 15.0,
         'random_seed': 42,
@@ -95,9 +112,9 @@ class ModelConfig:
     # LightGBM parameters
     lightgbm_params: Dict[str, Any] = field(default_factory=lambda: {
         'n_estimators': 1500,
-        'learning_rate': 0.02,
-        'max_depth': 5,
-        'num_leaves': 31,  # 通常设为 2^max_depth - 1
+        'learning_rate': 0.01,
+        'max_depth': 8,
+        'num_leaves': 64,  # 通常设为 2^max_depth - 1
         'min_child_samples': 20,    
         'subsample': 0.8,
         'subsample_freq': 1,
@@ -161,7 +178,7 @@ class ModelConfig:
         'beta_1': 0.9,                           # Exponential decay rate for first moment (adam)
         'beta_2': 0.999,                         # Exponential decay rate for second moment (adam)
         'epsilon': 1e-8,                         # Epsilon for numerical stability (adam)
-        'n_iter_no_change': 15,                 # Reduced patience (from 20) for earlier stopping
+        'n_iter_no_change': 20,                 # Reduced patience (from 20) for earlier stopping
     })
     
     # RandomForest parameters (for ensemble)
