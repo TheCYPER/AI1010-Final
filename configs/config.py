@@ -68,8 +68,8 @@ class ColumnConfig:
 class ModelConfig:
     """Model-specific configurations."""
     # Model type selection
-    model_type: str = "ensemble"  
-    # Options: "xgboost", "catboost", "lightgbm", "tabnet", "mlp", "knn", "logistic", "svm", "naive_bayes", "ridge", "extra_trees", "ensemble"
+    model_type: str = "ensemble2_gpu"  
+    # Options: "xgboost", "catboost", "lightgbm", "tabnet", "mlp", "knn", "logistic", "svm", "naive_bayes", "ridge", "extra_trees", "ensemble", "ensemble2", "ensemble2_gpu"
 
     # CatBoost: 0.8550
     # xgboost: 0.8400

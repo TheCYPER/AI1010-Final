@@ -88,13 +88,30 @@ class CrossValidator:
                 ensemble_type='voting',
                 voting='soft'
             )
+        elif model_type == "ensemble2":
+            from modeling.ensemble2 import create_ensemble2
+            from configs.ensemble2_config import Ensemble2Config
+            ensemble2_config = Ensemble2Config()
+            model = create_ensemble2(
+                config=ensemble2_config,
+                num_classes=num_classes
+            )
+        elif model_type == "ensemble2_gpu":
+            from modeling.ensemble2_gpu import create_ensemble2_gpu
+            from configs.ensemble2_config import Ensemble2Config
+            ensemble2_config = Ensemble2Config()
+            model = create_ensemble2_gpu(
+                config=ensemble2_config,
+                num_classes=num_classes
+            )
         else:
             raise ValueError(f"Unknown model type: {model_type}")
         
-        if model_type != "ensemble":
+        if model_type not in ["ensemble", "ensemble2", "ensemble2_gpu"]:
             model.build_model(num_classes=num_classes)
-        else:
+        elif model_type == "ensemble":
             model.build_model(num_classes=num_classes)
+        # ensemble2 and ensemble2_gpu already build model in create_* if num_classes is provided
         
         return model
     

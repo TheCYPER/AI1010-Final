@@ -13,6 +13,8 @@ from .naive_bayes_model import NaiveBayesModel
 from .ridge_model import RidgeModel
 from .extra_trees_model import ExtraTreesModel
 from .ensemble import EnsembleModel
+from .ensemble2 import Ensemble2Model
+from .ensemble2_gpu import Ensemble2GPUModel
 
 __all__ = [
     'BaseModel', 
@@ -27,6 +29,8 @@ __all__ = [
     'NaiveBayesModel',
     'RidgeModel',
     'ExtraTreesModel',
-    'EnsembleModel'
+    'EnsembleModel',
+    'Ensemble2Model',
+    'Ensemble2GPUModel'
 ]
 

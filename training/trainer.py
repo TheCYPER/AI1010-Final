@@ -359,16 +359,35 @@ class Trainer:
                 voting='soft'  # 可以从config中读取
             )
             logger.info("Using Ensemble model (combining all models)")
+        elif model_type == "ensemble2":
+            from modeling.ensemble2 import create_ensemble2
+            from configs.ensemble2_config import Ensemble2Config
+            ensemble2_config = Ensemble2Config()
+            model = create_ensemble2(
+                config=ensemble2_config,
+                num_classes=num_classes
+            )
+            logger.info(f"Using Ensemble2 model (Stacking with {ensemble2_config.n_models} diverse tree models)")
+        elif model_type == "ensemble2_gpu":
+            from modeling.ensemble2_gpu import create_ensemble2_gpu
+            from configs.ensemble2_config import Ensemble2Config
+            ensemble2_config = Ensemble2Config()
+            model = create_ensemble2_gpu(
+                config=ensemble2_config,
+                num_classes=num_classes
+            )
+            logger.info(f"Using Ensemble2 GPU model (Stacking with {ensemble2_config.n_models} GPU-accelerated tree models)")
         else:
             raise ValueError(f"Unknown model type: {model_type}")
         
         # 只有非ensemble模型需要build_model
-        if model_type != "ensemble":
+        if model_type not in ["ensemble", "ensemble2", "ensemble2_gpu"]:
             model.build_model(num_classes=num_classes)
-        else:
+        elif model_type == "ensemble":
             # ensemble模型在create_full_ensemble中已经build了base models
             # 但还需要build ensemble本身
             model.build_model(num_classes=num_classes)
+        # ensemble2 和 ensemble2_gpu 在 create_* 函数中已经 build_model
         
         return model
     
