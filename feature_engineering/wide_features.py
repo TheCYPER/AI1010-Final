@@ -38,7 +38,15 @@ class WideFeatureBuilder(BaseEstimator, TransformerMixin):
         """Compute ratio with safe division."""
         den = np.asarray(den, dtype=float)
         num = np.asarray(num, dtype=float)
-        return np.where((den > 0) & (~np.isnan(den)), num / den, np.nan)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return np.divide(num, den, out=np.full_like(num, np.nan, dtype=float), where=(den > 0))
+    
+    @staticmethod
+    def _clip_series(arr: np.ndarray, lower: float = 0.0, upper: float = 20.0) -> np.ndarray:
+        """Clip array values while preserving NaNs."""
+        clipped = np.clip(arr, lower, upper)
+        clipped[np.isnan(arr)] = np.nan
+        return clipped
     
     def _add_age_features(self, df: pd.DataFrame, out: Dict[str, Any]):
         """Add age-related features."""
@@ -93,34 +101,45 @@ class WideFeatureBuilder(BaseEstimator, TransformerMixin):
         plot_size = self._to_num(df, "PlotSize")
         total_rooms = self._to_num(df, "TotalRooms")
         parking = self._to_num(df, "ParkingSpots")
+        meeting_rooms = self._to_num(df, "MeetingRooms")
+        restrooms = self._to_num(df, "Restrooms")
         
         total_living = out.get("TotalLivingArea", pd.Series([np.nan] * len(df)))
         
-        out["BasementFinishRatio"] = self._safe_ratio(
+        out["BasementFinishRatio"] = self._clip_series(self._safe_ratio(
             (fin_b1.fillna(0) + fin_b2.fillna(0)).to_numpy(),
             basement_area.to_numpy()
-        )
-        out["OfficeSpaceRatio"] = self._safe_ratio(
+        ), upper=5.0)
+        out["OfficeSpaceRatio"] = self._clip_series(self._safe_ratio(
             office.to_numpy(),
             total_living.to_numpy()
-        )
-        out["PlotCoverage"] = self._safe_ratio(
+        ), upper=5.0)
+        out["PlotCoverage"] = self._clip_series(self._safe_ratio(
             total_living.to_numpy(),
             plot_size.to_numpy()
-        )
-        out["RoomDensity"] = self._safe_ratio(
+        ), upper=10.0)
+        out["RoomDensity"] = self._clip_series(self._safe_ratio(
             total_rooms.to_numpy(),
             total_living.to_numpy()
-        )
-        out["ParkingPerArea"] = self._safe_ratio(
+        ), upper=5.0)
+        out["ParkingPerArea"] = self._clip_series(self._safe_ratio(
             parking.to_numpy(),
             total_living.to_numpy()
-        )
+        ), upper=5.0)
         out["HasParking"] = np.where(parking.fillna(0) > 0, 1.0, 0.0)
-        out["BasementUtilization"] = self._safe_ratio(
+        out["BasementUtilization"] = self._clip_series(self._safe_ratio(
             (fin_b1.fillna(0) + fin_b2.fillna(0)).to_numpy(),
             (basement_area.fillna(0).to_numpy() + 1)
-        )
+        ), upper=5.0)
+        amenities = meeting_rooms.fillna(0) + restrooms.fillna(0) + parking.fillna(0)
+        out["AmenityDensity"] = self._clip_series(self._safe_ratio(
+            amenities.to_numpy(),
+            total_living.to_numpy()
+        ), upper=5.0)
+        out["RestroomPerRoom"] = self._clip_series(self._safe_ratio(
+            restrooms.to_numpy(),
+            total_rooms.to_numpy()
+        ), upper=3.0)
     
     def _add_quality_features(self, df: pd.DataFrame, out: Dict[str, Any]):
         """Add quality combination features."""
@@ -233,7 +252,19 @@ class WideFeatureBuilder(BaseEstimator, TransformerMixin):
         plot_size = self._to_num(df, "PlotSize")
         
         out["ValueDensity"] = (
-            quality * condition * np.log1p(area) / np.log1p(plot_size)
+            quality * condition * np.log1p(area) / np.log1p(plot_size + 1e-3)
+        )
+        
+        # Age-adjusted quality/area interactions
+        building_age = pd.to_numeric(pd.Series(out.get("BuildingAge")), errors="coerce")
+        overall_quality = pd.to_numeric(pd.Series(out.get("OverallQuality")), errors="coerce")
+        out["AgeQualityInteraction"] = self._clip_series(
+            np.log1p(overall_quality) / (1.0 + building_age),
+            upper=10.0
+        )
+        out["LogQualityArea"] = self._clip_series(
+            np.log1p(overall_quality) * np.log1p(area + 1.0),
+            upper=50.0
         )
     
     def _add_domain_knowledge_features(self, df: pd.DataFrame, out: Dict[str, Any]):
@@ -309,4 +340,3 @@ class WideFeatureBuilder(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, input_features=None):
         """Get output feature names."""
         return np.array(self.feature_names_ if self.feature_names_ else [])
-

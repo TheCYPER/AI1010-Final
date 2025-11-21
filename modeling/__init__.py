@@ -4,7 +4,6 @@ from .base_model import BaseModel
 from .xgboost_model import XGBoostModel
 from .catboost_model import CatBoostModel
 from .lightgbm_model import LightGBMModel
-from .tabnet_model import TabNetModel
 from .mlp_model import MLPModel
 from .knn_model import KNNModel
 from .logistic_model import LogisticRegressionModel
@@ -21,7 +20,6 @@ __all__ = [
     'XGBoostModel', 
     'CatBoostModel', 
     'LightGBMModel', 
-    'TabNetModel',
     'MLPModel',
     'KNNModel',
     'LogisticRegressionModel',
@@ -33,4 +31,3 @@ __all__ = [
     'Ensemble2Model',
     'Ensemble2GPUModel'
 ]
-

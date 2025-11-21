@@ -43,7 +43,8 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         
         for c in self.cols:
             if c in X.columns:
-                vc = X[c].value_counts(dropna=False)
+                col = X[c].astype(str)
+                vc = col.value_counts(dropna=False)
                 self.maps_[c] = (vc / n)
         
         self.feature_names_out_ = [f"FE__{c}" for c in self.cols if c in self.maps_]
@@ -63,7 +64,8 @@ class FrequencyEncoder(BaseEstimator, TransformerMixin):
         for c in self.cols:
             if c in self.maps_:
                 m = self.maps_[c]
-                vals = X[c].map(m).fillna(0.0).to_numpy().reshape(-1, 1)
+                col = X[c].astype(str)
+                vals = col.map(m).fillna(0.0).to_numpy().reshape(-1, 1)
                 outs.append(vals)
         
         return np.hstack(outs) if outs else np.empty((len(X), 0))
@@ -124,7 +126,7 @@ class MultiClassTargetEncoder(BaseEstimator, TransformerMixin):
                 continue
             
             dfc = pd.DataFrame({
-                c: X[c].astype("category"),
+                c: X[c].astype(str).astype("category"),
                 "__y__": y
             })
             
@@ -181,7 +183,7 @@ class MultiClassTargetEncoder(BaseEstimator, TransformerMixin):
             
             # Default to prior for unknown categories
             rows = []
-            col_vals = X[c].astype("category") if c in X.columns else pd.Series([None] * n)
+            col_vals = X[c].astype(str).astype("category") if c in X.columns else pd.Series([None] * n)
             
             for val in col_vals:
                 rows.append(m.get(val, self.prior_))
@@ -194,4 +196,3 @@ class MultiClassTargetEncoder(BaseEstimator, TransformerMixin):
     def get_feature_names_out(self, input_features=None):
         """Get output feature names."""
         return np.array(self.feature_names_out_)
-

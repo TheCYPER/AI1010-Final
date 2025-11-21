@@ -27,11 +27,18 @@ Usage examples:
 
 import argparse
 import sys
+import os
 from pathlib import Path
 
 from configs import Config
 from utils.logger import setup_logger
 import pandas as pd
+
+# Sandbox-friendly defaults
+os.environ.setdefault("JOBLIB_MULTIPROCESSING", "0")  # Prefer threading backend to avoid semaphore issues
+mpl_config_dir = Path("outputs/mpl_config")
+os.environ.setdefault("MPLCONFIGDIR", str(mpl_config_dir))
+mpl_config_dir.mkdir(parents=True, exist_ok=True)
 
 # Setup logger
 logger = setup_logger(
@@ -346,4 +353,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

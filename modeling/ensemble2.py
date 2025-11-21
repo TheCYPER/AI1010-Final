@@ -7,9 +7,12 @@ and combines them using StackingClassifier for improved performance.
 
 import numpy as np
 from typing import List, Dict, Any, Optional
-from sklearn.ensemble import StackingClassifier, RandomForestClassifier, ExtraTreesClassifier
+from sklearn.ensemble import StackingClassifier, RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
+from sklearn.neural_network import MLPClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import make_scorer, accuracy_score
 from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 
@@ -97,6 +100,49 @@ class Ensemble2Model(BaseModel):
         }
         return ExtraTreesClassifier(**et_params)
     
+    def _create_mlp_model(self, params: Dict[str, Any], model_idx: int) -> MLPClassifier:
+        """Create an MLP classifier with lightweight defaults."""
+        mlp_params = {
+            'random_state': self.config.random_state + model_idx,
+            'early_stopping': True,
+            'learning_rate': 'adaptive',
+            'verbose': False,
+            **params
+        }
+        return MLPClassifier(**mlp_params)
+    
+    def _create_hist_gbm_model(self, params: Dict[str, Any], model_idx: int) -> HistGradientBoostingClassifier:
+        """Create a HistGradientBoosting classifier."""
+        hgb_params = {
+            'random_state': self.config.random_state + model_idx,
+            **params
+        }
+        return HistGradientBoostingClassifier(**hgb_params)
+    
+    def _create_svm_model(self, params: Dict[str, Any], model_idx: int) -> SVC:
+        """Create an SVM with probability outputs."""
+        svm_params = {
+            'probability': True,
+            'random_state': self.config.random_state + model_idx,
+            **params
+        }
+        return SVC(**svm_params)
+    
+    def _create_knn_model(self, params: Dict[str, Any], model_idx: int) -> KNeighborsClassifier:
+        """Create a KNN classifier."""
+        knn_params = {**params}
+        return KNeighborsClassifier(**knn_params)
+    
+    def _create_logistic_model(self, params: Dict[str, Any], model_idx: int) -> LogisticRegression:
+        """Create a multinomial logistic regression with prob outputs."""
+        log_params = {
+            'multi_class': 'auto',
+            'n_jobs': 1,
+            'random_state': self.config.random_state + model_idx,
+            **params
+        }
+        return LogisticRegression(**log_params)
+    
     def _create_final_estimator(self) -> Any:
         """Create the meta-learner (final estimator) for stacking."""
         final_type = self.config.stacking_config['final_estimator']
@@ -174,6 +220,36 @@ class Ensemble2Model(BaseModel):
                         random_state=self.config.random_state + model_idx
                     )
                     model = self._create_extra_trees_model(params, model_idx)
+                elif model_type == 'mlp':
+                    params = sample_hyperparameters(
+                        self.config.mlp_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_mlp_model(params, model_idx)
+                elif model_type == 'hist_gbm':
+                    params = sample_hyperparameters(
+                        self.config.hgb_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_hist_gbm_model(params, model_idx)
+                elif model_type == 'svm':
+                    params = sample_hyperparameters(
+                        self.config.svm_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_svm_model(params, model_idx)
+                elif model_type == 'knn':
+                    params = sample_hyperparameters(
+                        self.config.knn_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_knn_model(params, model_idx)
+                elif model_type == 'logistic':
+                    params = sample_hyperparameters(
+                        self.config.logistic_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_logistic_model(params, model_idx)
                 else:
                     raise ValueError(f"Unknown model type: {model_type}")
                 
@@ -191,6 +267,8 @@ class Ensemble2Model(BaseModel):
             final_estimator=final_estimator,
             cv=self.config.stacking_config['cv'],
             n_jobs=self.config.n_jobs,
+            stack_method='predict_proba',
+            passthrough=False,
             verbose=1 if self.config.verbose else 0
         )
         
@@ -239,7 +317,11 @@ class Ensemble2Model(BaseModel):
                      if k not in ['eval_set', 'early_stopping_rounds', 'verbose']}
         
         logger.info(f"Training started. Each 'Done {cv_folds} out of {cv_folds}' message means one model completed CV.")
-        self.model_.fit(X, y, **fit_kwargs)
+        from joblib import parallel_backend
+        # Use threading backend to avoid semaphore limits in constrained environments
+        backend_n_jobs = self.model_.n_jobs if hasattr(self.model_, 'n_jobs') else None
+        with parallel_backend('threading', n_jobs=backend_n_jobs):
+            self.model_.fit(X, y, **fit_kwargs)
         logger.info("Ensemble2 training completed!")
         self.is_fitted_ = True
         return self
@@ -317,4 +399,3 @@ def create_ensemble2(
     if num_classes is not None:
         ensemble.build_model(num_classes)
     return ensemble
-

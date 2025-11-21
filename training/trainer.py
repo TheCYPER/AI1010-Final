@@ -221,8 +221,14 @@ class Trainer:
             'verbose': False
         }
         
+        # Only pass sample_weight if the model.fit signature supports it
         if sample_weight is not None:
-            fit_kwargs['sample_weight'] = sample_weight
+            import inspect
+            supports_sw = 'sample_weight' in inspect.signature(model.fit).parameters
+            if supports_sw:
+                fit_kwargs['sample_weight'] = sample_weight
+            else:
+                logger.info("Skipping sample_weight: model.fit does not accept it.")
         
         if self.config.training.use_early_stopping:
             fit_kwargs['early_stopping_rounds'] = self.config.training.early_stopping_rounds

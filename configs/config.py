@@ -68,8 +68,8 @@ class ColumnConfig:
 class ModelConfig:
     """Model-specific configurations."""
     # Model type selection
-    model_type: str = "ensemble2_gpu"  
-    # Options: "xgboost", "catboost", "lightgbm", "tabnet", "mlp", "knn", "logistic", "svm", "naive_bayes", "ridge", "extra_trees", "ensemble", "ensemble2", "ensemble2_gpu"
+    model_type: str = "ensemble2"  
+    # Options: "xgboost", "catboost", "lightgbm", "tabnet", "mlp", "knn", "logistic", "svm", "naive_bayes", "ridge", "extra_trees", "random_forest", "hist_gbm", "ensemble", "ensemble2", "ensemble2_gpu"
 
     # CatBoost: 0.8550
     # xgboost: 0.8400
@@ -80,47 +80,49 @@ class ModelConfig:
     # XGBoost parameters
     xgb_params: Dict[str, Any] = field(default_factory=lambda: {
         'objective': 'multi:softprob',
-        'n_estimators': 1500,
-        'learning_rate': 0.01,
-        'max_depth': 7,
-        'gamma': 1.0,
-        'min_child_weight': 10,
-        'subsample': 0.75,
-        'colsample_bytree': 0.55,
+        'n_estimators': 550,
+        'learning_rate': 0.08,
+        'max_depth': 4,
+        'gamma': 0.1,
+        'min_child_weight': 4,
+        'subsample': 0.85,
+        'colsample_bytree': 0.75,
         'reg_lambda': 10.0,
-        'reg_alpha': 3.0,
+        'reg_alpha': 0.4,
         'random_state': 42,
         'eval_metric': 'mlogloss',
         'tree_method': 'hist',
-        'n_jobs': -1
+        'n_jobs': 6
     })
     
     # CatBoost parameters
     catboost_params: Dict[str, Any] = field(default_factory=lambda: {
-        'iterations': 1700,
-        'learning_rate': 0.01,
+        'iterations': 900,
+        'learning_rate': 0.06,
         'depth': 7,
-        'l2_leaf_reg': 15.0,
+        'l2_leaf_reg': 10.0,
         'random_seed': 42,
         'loss_function': 'MultiClass',
         'eval_metric': 'MultiClass',
-        'task_type': 'GPU',  # 'GPU' if you have GPU
+        'task_type': 'CPU',  # Default to CPU; switch to 'GPU' only if available
         'verbose': False,
         'allow_writing_files': False,  # 不生成中间文件
+        'bootstrap_type': 'Bernoulli',  # allows subsample and drops conflict with Bayesian
+        'subsample': 0.85
     })
     
     # LightGBM parameters
     lightgbm_params: Dict[str, Any] = field(default_factory=lambda: {
-        'n_estimators': 1500,
-        'learning_rate': 0.01,
+        'n_estimators': 800,
+        'learning_rate': 0.07,
         'max_depth': 8,
         'num_leaves': 64,  # 通常设为 2^max_depth - 1
-        'min_child_samples': 20,    
-        'subsample': 0.8,
+        'min_child_samples': 30,    
+        'subsample': 0.9,
         'subsample_freq': 1,
-        'colsample_bytree': 0.8,
-        'reg_alpha': 3.0,
-        'reg_lambda': 10.0,
+        'colsample_bytree': 0.85,
+        'reg_alpha': 1.5,
+        'reg_lambda': 6.0,
         'random_state': 42,
         'objective': 'multiclass',
         'metric': 'multi_logloss',
@@ -136,23 +138,23 @@ class ModelConfig:
     # 3. 适当的学习率和训练轮数
     tabnet_params: Dict[str, Any] = field(default_factory=lambda: {
         # 模型架构参数（传给 TabNetClassifier.__init__）
-        'n_d': 16,                  # 决策层维度（降低以减少过拟合）
-        'n_a': 16,                  # 注意力层维度（降低以减少过拟合）
-        'n_steps': 5,               # 决策步数（降低以减少过拟合，5-7 通常较好）
-        'gamma': 1.3,               # 特征选择的松弛因子（降低以减少过拟合）
+        'n_d': 32,                  # 决策层维度
+        'n_a': 32,                  # 注意力层维度
+        'n_steps': 4,               # 决策步数
+        'gamma': 1.3,               # 特征选择的松弛因子
         'n_independent': 2,         # 独立的 GLU 层数
         'n_shared': 2,              # 共享的 GLU 层数
-        'lambda_sparse': 1e-3,      # 稀疏正则化（降低以允许更多特征）
+        'lambda_sparse': 1e-3,      # 稀疏正则化
         'momentum': 0.3,            # Batch normalization 动量
         'clip_value': 2.0,          # 梯度裁剪
         'mask_type': 'entmax',      # 掩码类型: 'sparsemax' 或 'entmax'
         'seed': 42,
         'verbose': 0,
         # 训练参数（传给 fit() 方法，需要单独处理）
-        '_max_epochs': 250,         # 增加训练轮数（TabNet 需要更多训练）
-        '_batch_size': 512,         # 增加批大小（提高稳定性）
-        '_patience': 30,            # 增加早停轮数（给模型更多机会）
-        '_lr': 0.01,               # 学习率（0.01-0.02 通常较好）
+        '_max_epochs': 160,         # 控制时长，仍给足训练
+        '_batch_size': 512,         # 批大小
+        '_patience': 25,            # 早停轮数
+        '_lr': 0.03,                # 学习率
     })
     
     # MLP (Multi-Layer Perceptron) parameters - sklearn neural network
@@ -183,11 +185,13 @@ class ModelConfig:
     
     # RandomForest parameters (for ensemble)
     rf_params: Dict[str, Any] = field(default_factory=lambda: {
-        'n_estimators': 100,
-        'max_depth': 7,
-        'min_samples_split': 5,
+        'n_estimators': 300,
+        'max_depth': None,
+        'min_samples_split': 2,
         'random_state': 42,
-        'n_jobs': -1
+        'n_jobs': -1,
+        'min_samples_leaf': 1,
+        'max_features': 'sqrt'
     })
     
     # KNN (K-Nearest Neighbors) parameters - simple, fast, provides diversity
@@ -240,14 +244,26 @@ class ModelConfig:
     
     # Extra Trees (Extremely Randomized Trees) parameters - more randomized than RF
     extra_trees_params: Dict[str, Any] = field(default_factory=lambda: {
-        'n_estimators': 100,                 # Number of trees
-        'max_depth': 7,                      # Maximum depth
-        'min_samples_split': 5,              # Minimum samples to split
+        'n_estimators': 200,                 # Number of trees
+        'max_depth': None,                   # Maximum depth
+        'min_samples_split': 4,              # Minimum samples to split
         'min_samples_leaf': 2,               # Minimum samples in leaf
         'max_features': 'sqrt',              # Features to consider: 'sqrt', 'log2', None, int, float
         'bootstrap': True,                   # Bootstrap sampling
         'random_state': 42,
         'n_jobs': -1,                        # Use all cores
+    })
+
+    # HistGradientBoosting parameters
+    hgb_params: Dict[str, Any] = field(default_factory=lambda: {
+        'learning_rate': 0.08,
+        'max_depth': 8,
+        'max_leaf_nodes': 48,
+        'min_samples_leaf': 20,
+        'l2_regularization': 0.15,
+        'validation_fraction': 0.1,
+        'early_stopping': True,
+        'random_state': 42
     })
 
 
@@ -294,7 +310,7 @@ class TrainingConfig:
     random_state: int = 42
     
     # Cross-validation
-    n_splits: int = 5
+    n_splits: int = 3
     shuffle: bool = True
     
     # Class weighting
@@ -303,7 +319,7 @@ class TrainingConfig:
     
     # Early stopping
     use_early_stopping: bool = True
-    early_stopping_rounds: int = 80
+    early_stopping_rounds: int = 50
     
     # Verbosity
     verbose: bool = True
@@ -369,4 +385,3 @@ def load_config(config_path: Optional[str] = None) -> Config:
     
     # TODO: Implement loading from file if needed
     raise NotImplementedError("Loading config from file not yet implemented")
-

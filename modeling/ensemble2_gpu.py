@@ -48,9 +48,11 @@ class Ensemble2GPUModel(BaseModel):
         self.model_ = None
         self.num_classes_ = None
         self._xgb_gpu_available = None  # Cache XGBoost GPU availability
+        self._catboost_gpu_available = None  # Cache CatBoost GPU availability
+        self._catboost_uses_gpu = False
     
     def _create_catboost_model(self, params: Dict[str, Any], model_idx: int, num_classes: int) -> CatBoostClassifier:
-        """Create a CatBoost model with GPU acceleration."""
+        """Create a CatBoost model with GPU acceleration when available."""
         # CatBoost parameter compatibility:
         # - Bayesian bootstrap: supports bagging_temperature, but NOT subsample
         # - Other bootstrap types: support subsample, but NOT bagging_temperature
@@ -76,19 +78,43 @@ class Ensemble2GPUModel(BaseModel):
         # GPU mode: Remove colsample_bylevel for MultiClass (not supported on GPU)
         params.pop('colsample_bylevel', None)
         
+        use_gpu = self._check_catboost_gpu_available()
+        if not use_gpu and model_idx == 0:
+            import logging
+            logging.getLogger('main').warning("CatBoost GPU not available, falling back to CPU.")
+        self._catboost_uses_gpu = self._catboost_uses_gpu or use_gpu
+        
+        task_type = 'GPU' if use_gpu else 'CPU'
+        thread_count = 1 if use_gpu else (self.config.n_jobs if self.config.n_jobs and self.config.n_jobs > 0 else 1)
+        
         catboost_params = {
             'loss_function': 'MultiClass',
             'eval_metric': 'MultiClass',
             'classes_count': num_classes,
             'random_seed': self.config.random_state + model_idx,
-            'task_type': 'GPU',  # Enable GPU acceleration
-            'devices': '0',  # Use first GPU (can be '0:1' for multiple GPUs)
+            'task_type': task_type,
+            **({'devices': '0'} if use_gpu else {}),
             'verbose': False,  # Disable verbose output for ensemble
             'allow_writing_files': False,  # Don't write intermediate files
-            'thread_count': 1,  # Use 1 thread per model (GPU handles computation)
+            'thread_count': thread_count,
             **params
         }
         return CatBoostClassifier(**catboost_params)
+    
+    def _check_catboost_gpu_available(self) -> bool:
+        """Check if CatBoost can access a GPU."""
+        if self._catboost_gpu_available is not None:
+            return self._catboost_gpu_available
+        
+        try:
+            from catboost.utils import get_gpu_device_count
+            self._catboost_gpu_available = get_gpu_device_count() > 0
+        except Exception:
+            # If CatBoost isn't built with GPU support or any other error occurs,
+            # treat it as unavailable.
+            self._catboost_gpu_available = False
+        
+        return self._catboost_gpu_available
     
     def _check_xgb_gpu_available(self) -> bool:
         """Check if XGBoost GPU is available."""
@@ -269,7 +295,7 @@ class Ensemble2GPUModel(BaseModel):
         # Create StackingClassifier
         # CatBoost GPU models cannot run in parallel (device conflict)
         # Check if we have CatBoost GPU models
-        has_catboost_gpu = any(name.startswith('catboost_') for name, _ in self.base_models_)
+        has_catboost_gpu = self._catboost_uses_gpu
         
         if has_catboost_gpu:
             # CatBoost GPU doesn't support parallel training on same device
@@ -326,10 +352,15 @@ class Ensemble2GPUModel(BaseModel):
         # Count models by type
         model_counts = {}
         gpu_models = 0
+        xgb_gpu_available = self._check_xgb_gpu_available()
         for name, _ in self.base_models_:
             model_type = name.split('_')[0]
             model_counts[model_type] = model_counts.get(model_type, 0) + 1
-            if model_type in ['catboost', 'xgb']:
+            is_gpu = (
+                (model_type == 'catboost' and self._catboost_uses_gpu) or
+                (model_type == 'xgb' and xgb_gpu_available)
+            )
+            if is_gpu:
                 gpu_models += 1
         
         logger.info(f"Starting Ensemble2 GPU training: {n_models} models ({gpu_models} GPU, {n_models - gpu_models} CPU), {cv_folds}-fold CV, {total_tasks} tasks")
@@ -344,7 +375,11 @@ class Ensemble2GPUModel(BaseModel):
         training_start = time.time()
         
         try:
-            self.model_.fit(X, y, **fit_kwargs)
+            from joblib import parallel_backend
+            backend_n_jobs = self.model_.n_jobs if hasattr(self.model_, 'n_jobs') else None
+            # Use threading backend to avoid OS restrictions on multiprocessing/semaphores
+            with parallel_backend('threading', n_jobs=backend_n_jobs):
+                self.model_.fit(X, y, **fit_kwargs)
             training_time = time.time() - training_start
             logger.info(f"Training completed in {training_time / 60:.1f} min ({training_time / total_tasks:.1f}s per task)")
         except Exception as e:
@@ -428,4 +463,3 @@ def create_ensemble2_gpu(
     if num_classes is not None:
         ensemble.build_model(num_classes)
     return ensemble
-

@@ -17,23 +17,24 @@ class Ensemble2Config:
     # Number of base models
     # WARNING: 100 models with 5-fold CV = 500 training tasks, very slow!
     # Start with 20-30 models for testing
-    n_models: int = 15  # Reduced from 100 for faster training
+    n_models: int = 20  # Expanded ensemble with mixed tree models
     
-    # Model types to use (can mix different tree algorithms)
+    # Model types to use (can mix different algorithms)
     model_types: List[str] = field(default_factory=lambda: [
-        'catboost',  # CatBoost - gradient boosting with categorical handling
-        'xgb',       # XGBoost - gradient boosting
-        'rf',        # RandomForest - bagging
-        'extra_trees'  # ExtraTrees - more randomized
+        'catboost',    # CatBoost - gradient boosting with categorical handling
+        'xgb',         # XGBoost - gradient boosting
+        'rf',          # RandomForest - bagging
+        'extra_trees', # ExtraTrees - randomized trees
+        'hist_gbm',    # sklearn HistGradientBoosting
     ])
     
     # Distribution of model types (should sum to n_models)
-    # CatBoost is set to have more models than XGBoost
     model_type_distribution: Dict[str, int] = field(default_factory=lambda: {
-        'catboost': 6,    # 40 CatBoost models (more than XGBoost)
-        'xgb': 5,         # 40 XGBoost models
-        'rf': 3,           # 6 RandomForest models
-        'extra_trees': 1   # 4 ExtraTrees models
+        'catboost': 6,
+        'xgb': 6,
+        'rf': 4,
+        'extra_trees': 2,
+        'hist_gbm': 2
     })
     
     # Hyperparameter search spaces for each model type
@@ -79,14 +80,49 @@ class Ensemble2Config:
         'bootstrap': [True, False],     # Bootstrap sampling
     })
     
+    mlp_search_space: Dict[str, Any] = field(default_factory=lambda: {
+        'hidden_layer_sizes': [(64, 32), (128, 64), (64, 64)],
+        'alpha': (1e-4, 1e-2),
+        'learning_rate_init': (0.001, 0.01),
+        'max_iter': (120, 200),
+        'batch_size': [64, 128, 256],
+    })
+    
+    hgb_search_space: Dict[str, Any] = field(default_factory=lambda: {
+        'learning_rate': (0.03, 0.15),
+        'max_depth': (4, 10),
+        'max_leaf_nodes': (16, 64),
+        'min_samples_leaf': (5, 30),
+        'l2_regularization': (0.0, 0.2)
+    })
+    
+    svm_search_space: Dict[str, Any] = field(default_factory=lambda: {
+        'C': (0.5, 5.0),
+        'gamma': ['scale', 'auto']
+    })
+    
+    knn_search_space: Dict[str, Any] = field(default_factory=lambda: {
+        'n_neighbors': (3, 25),
+        'weights': ['uniform', 'distance'],
+        'p': [1, 2]
+    })
+    
+    logistic_search_space: Dict[str, Any] = field(default_factory=lambda: {
+        'C': (0.3, 2.5),
+        'penalty': ['l2'],
+        'solver': ['lbfgs'],
+        'max_iter': (400, 800),  # higher cap to avoid convergence warnings
+        'tol': (1e-4, 1e-3)
+    })
+    
     # Stacking configuration
     stacking_config: Dict[str, Any] = field(default_factory=lambda: {
-        'cv': 3,                         # Cross-validation folds for stacking (reduced from 5 for speed)
+        'cv': 2,                         # Cross-validation folds for stacking (reduced for speed)
         'final_estimator': 'logistic',   # Meta-learner: 'logistic', 'rf', 'xgb', 'svm'
         'final_estimator_params': {      # Parameters for meta-learner
             'logistic': {
                 'max_iter': 1000,
-                'C': 1.0,
+                'C': 0.5,
                 'solver': 'lbfgs',
                 'random_state': 42,
                 'n_jobs': -1
@@ -117,7 +153,7 @@ class Ensemble2Config:
     random_state: int = 42
     
     # Parallel processing
-    n_jobs: int = -1  # Use all available cores
+    n_jobs: int = 2  # Threaded parallelism without oversubscription
     
     # Verbosity
     verbose: bool = True
@@ -158,11 +194,11 @@ def sample_hyperparameters(
                     param_range[0], param_range[1]
                 )
         elif isinstance(param_range, list):
-            # Categorical (list of options)
-            params[param_name] = rng.choice(param_range)
+            # Categorical (list of options) - sample by index to handle tuples safely
+            idx = rng.randint(0, len(param_range))
+            params[param_name] = param_range[idx]
         else:
             # Single value
             params[param_name] = param_range
     
     return params
-

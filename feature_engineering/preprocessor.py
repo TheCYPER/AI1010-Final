@@ -8,12 +8,19 @@ from typing import List
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, RobustScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, RobustScaler, FunctionTransformer
 
 from .encoders import FrequencyEncoder, MultiClassTargetEncoder
 from .wide_features import WideFeatureBuilder
 from .statistical_features import StatisticalAggregator
 from .transformers import Log1pTransformer, BusinessMissingIndicator, KNNImputerWithIndicators
+
+
+def _to_str_array(X):
+    """Safely cast inputs to string for categorical encoding (pickle friendly)."""
+    if isinstance(X, pd.DataFrame):
+        return X.astype(str)
+    return np.asarray(X).astype(str)
 
 
 def build_preprocessor(
@@ -142,6 +149,7 @@ def build_preprocessor(
     # Build categorical pipeline (only if there are categorical columns)
     cat_pipe = Pipeline(steps=[
         ("imputer", SimpleImputer(strategy="constant", fill_value="__MISSING__")),
+        ("to_str", FunctionTransformer(_to_str_array, validate=False)),
         ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False))
     ])
     
@@ -340,4 +348,3 @@ class FeaturePreprocessor:
             Transformed array
         """
         return self.fit(X, y, num_cols, cat_cols).transform(X)
-
