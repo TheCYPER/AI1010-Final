@@ -12,7 +12,7 @@ GPU Support:
 
 import numpy as np
 from typing import List, Dict, Any, Optional
-from sklearn.ensemble import StackingClassifier, RandomForestClassifier, ExtraTreesClassifier
+from sklearn.ensemble import StackingClassifier, RandomForestClassifier, ExtraTreesClassifier, HistGradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
@@ -190,6 +190,14 @@ class Ensemble2GPUModel(BaseModel):
         }
         return ExtraTreesClassifier(**et_params)
     
+    def _create_hist_gbm_model(self, params: Dict[str, Any], model_idx: int) -> HistGradientBoostingClassifier:
+        """Create a HistGradientBoosting classifier (CPU only, sklearn limitation)."""
+        hgb_params = {
+            'random_state': self.config.random_state + model_idx,
+            **params
+        }
+        return HistGradientBoostingClassifier(**hgb_params)
+    
     def _create_final_estimator(self, num_classes: int) -> Any:
         """Create the meta-learner (final estimator) for stacking."""
         final_type = self.config.stacking_config['final_estimator']
@@ -280,6 +288,12 @@ class Ensemble2GPUModel(BaseModel):
                         random_state=self.config.random_state + model_idx
                     )
                     model = self._create_extra_trees_model(params, model_idx)
+                elif model_type == 'hist_gbm':
+                    params = sample_hyperparameters(
+                        self.config.hgb_search_space,
+                        random_state=self.config.random_state + model_idx
+                    )
+                    model = self._create_hist_gbm_model(params, model_idx)
                 else:
                     raise ValueError(f"Unknown model type: {model_type}")
                 
