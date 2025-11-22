@@ -1,0 +1,221 @@
+\documentclass[11pt]{article} % 改小一号字体
+\usepackage{geometry,graphicx,float,booktabs,hyperref,url,amsmath,caption,xcolor}
+\geometry{margin=0.85in} % 稍微缩小页边距
+\setlength{\parskip}{0.35em} % 减小段间距
+\setlength{\parindent}{0pt}
+\linespread{0.97} % 略微压缩行距
+\captionsetup{font=small} % 缩小图表标题字体
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=cyan}
+
+
+\title{\textbf{AI1010 Group Project Report}}
+\date{}
+\begin{document}
+\maketitle
+
+% ==================================================
+\section{Data Exploration \& Preprocessing}
+
+\subsection{Dataset Overview}
+The dataset has \textbf{35,000 records} and \textbf{79 features} (\textbf{31 numerical}, \textbf{48 categorical}).  
+The target \texttt{OfficeCategory} is a \textbf{five-class label} with roughly even proportions ($\approx20\%$ each), supporting fair learning.
+
+\subsection{Class Imbalance}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\linewidth]{imgs/ScreenShot_2025-11-12_014346_593.png}
+\caption{Balanced \texttt{OfficeCategory} and skewed categorical predictors.}
+\end{figure}
+While the target is balanced, some categorical predictors (e.g., \texttt{ZoningClassification}, \texttt{StreetType}) show internal imbalance.  
+To avoid overfitting to rare levels, these columns were dropped before encoding.
+
+\subsection{Missing Value Analysis}
+Several features show extreme missingness (Table~\ref{tab:missing}).  
+\texttt{RecreationQuality} and \texttt{MiscellaneousFeature} exceed 99\%, while missing \texttt{ConferenceRoomQuality} usually means “no conference room.”
+
+\begin{table}[H]\centering
+\begin{tabular}{l c}
+\toprule
+\textbf{Feature} & \textbf{Missing Rate} \\
+\midrule
+RecreationQuality & 100.0\% \\
+MiscellaneousFeature & 99.9\% \\
+AlleyAccess & 99.5\% \\
+ExteriorFinishType & 84.3\% \\
+ConferenceRoomQuality & 73.8\% \\
+\bottomrule
+\end{tabular}
+\caption{Highly incomplete features.}
+\label{tab:missing}
+\end{table}
+
+\textbf{Handling:}
+\begin{itemize}
+\item Numeric: median imputation + missing indicator.
+\item Categorical: fill with \texttt{“MISSING”}.
+\item Business rule: missing \texttt{ConferenceRoomQuality} $\Rightarrow$ “no conference room”.
+\item Drop extremely sparse columns (\texttt{RecreationQuality}, \texttt{AlleyAccess}, etc.).
+\end{itemize}
+
+\textbf{Rationale:}  
+This imputation strategy balances robustness, interpretability, and data efficiency.  
+\textbf{Median imputation} is resistant to extreme values and maintains realistic central tendencies.  
+\textbf{Missingness indicators} allow the model to learn whether the absence of data itself carries predictive meaning (e.g., unavailable facilities often imply low-end offices).  
+\textbf{Categorical ``MISSING'' tokens} ensure that incomplete entries remain usable and that missingness is treated as an informative category rather than random noise.  
+\textbf{Business-aware rules}—such as interpreting missing \texttt{ConferenceRoomQuality} as “no conference room”—translate data gaps into meaningful domain signals.  
+Finally, \textbf{dropping extremely sparse features} prevents noise and computational overhead.  
+Together, these choices form a robust, interpretable preprocessing design aligned with both statistical best practices and business logic.
+
+
+\subsection{Categorical Feature Strategy}
+A mixed encoding approach balanced interpretability and efficiency:
+\begin{itemize}
+\item One-Hot Encoding for low-cardinality features.
+\item Frequency Encoding for mid-cardinality (\texttt{RoofType}, \texttt{ExteriorCovering1}).
+\item Target Encoding for impactful, high-cardinality ones (\texttt{ZoningClassification}, \texttt{BuildingType}, Laplace $\alpha=10$).
+\item Binary flag for missing \texttt{ConferenceRoomQuality}.
+\end{itemize}
+
+\subsection{Outliers \& Anomalies}
+Outliers detected via IQR were mostly genuine; $<5\%$ extremes across variables.  
+Large right tails (\texttt{FinishedBasementArea2}, \texttt{EnclosedBalconyArea}) were legitimate.  
+Given tree models’ robustness, no removals were applied.
+
+\subsection{Correlation \& Feature Insights}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.45\linewidth]{imgs/ScreenShot_2025-11-12_015708_395.png}
+\caption{Numerical feature correlations.}
+\end{figure}
+Strong correlations appear between \texttt{ParkingArea}--\texttt{TerraceArea} and \texttt{ConstructionYear}--\texttt{RenovationYear}.  
+Clusters reveal redundancy and aggregation opportunities.
+
+\subsection{Exploration Insights}
+\begin{itemize}
+\item Balanced target supports unbiased learning.
+\item Systematic missingness reflects business logic, not random loss.
+\item Area- and year-related correlations suggest aggregation potential.
+\item Categorical imbalance varies widely.
+\item Outliers show natural property diversity, not noise.
+\end{itemize}
+
+% ==================================================
+\section{Feature Engineering}
+
+\subsection{Experimental Setup}
+\begin{itemize}
+\item \textbf{Model:} RandomForestClassifier ($n\_estimators$=200, $max\_depth$=20, $min\_samples\_split$=5,\\ $random\_state$=42)
+\item \textbf{Split:} 80/20 stratified train-test with class weights
+\item \textbf{Pipeline:} median+indicator (numeric), constant fill+encoder (categorical), standardization
+\item \textbf{Metric:} Validation accuracy \& weighted F1
+\end{itemize}
+
+\subsection{Feature Creation and Motivation}
+
+Because the feature engineering process generated a large number of derived variables, this section highlights the \textbf{major categories} of transformations, with representative examples illustrating their motivation and purpose.
+
+\textbf{1. Log-Transformed Numeric Features.}  
+Highly skewed numerical variables (e.g., \texttt{PlotSize}, \texttt{BasementArea}) were log1p-transformed to \textbf{stabilize variance}, mitigate the effect of extreme values, and make their distributions more comparable to other scale-sensitive features. This helps tree-based and linear models capture proportional rather than absolute differences.
+
+\textbf{2. Frequency and Target Encodings.}  
+For high-cardinality categorical variables, frequency and smoothed target encodings were applied to \textbf{retain predictive information without exploding dimensionality}.  
+Frequency encoding represents how common each category is, while target encoding captures the \textbf{expected outcome tendency} of each level (\texttt{P(y|x)}).  
+Together, they compress large categorical spaces while preserving essential signal strength.
+
+\textbf{3. Domain-Inspired Composite Features.}  
+Several interpretable features were designed to embed business meaning directly into the data representation.  
+Examples include:  
+\begin{itemize}
+\item \texttt{BuildingAge}: time since construction, representing modernization and depreciation; newer buildings tend to have higher energy efficiency, lower maintenance costs, and modern layouts—important signals for office category differentiation.
+\item \texttt{OverallQuality}: aggregation of structural and condition scores, summarizing overall property appeal; combines multiple quality dimensions into a single interpretable measure, improving both model stability and human interpretability.
+\item \texttt{QualityAreaRatio}: usable area per unit of quality, capturing the efficiency of spatial utilization; offices offering larger usable areas at similar quality levels indicate better value and competitiveness within their segment.
+
+\end{itemize}
+These composites improve interpretability and align feature space with real-world property valuation logic.
+
+\textbf{4. Contextual Statistical Features.}  
+Context-aware statistics, such as \texttt{OverallQuality \\ \_ZScore\_by\_Zoning}, measure how each property compares with its peer group.  
+Such features encode \textbf{relative standing and neighborhood-level variation}, enabling the model to capture localized market differences rather than treating all samples globally.
+
+
+\subsection{Feature Selection}
+Ablation showed only a subset improved results.  
+Frequency encoding (\texttt{RoofType}, \texttt{ExteriorCovering1}) helped; others (\texttt{FoundationType}, some target encodings) hurt.  
+Domain features (\texttt{QualityAreaProximity}, \texttt{OverallQuality}, \texttt{ConstructionDecade}) yielded strong gains; redundant or noisy ones were dropped.
+
+\subsection{Impact on Model Performance}
+\begin{table}[H]\centering
+\resizebox{0.9\textwidth}{!}{
+\begin{tabular}{l p{5.2cm} c c}
+\toprule
+\textbf{Configuration} & \textbf{Active Features} & \textbf{Accuracy} & \textbf{Weighted F1} \\
+\midrule
+Baseline & Core preprocessing only & 0.6957 & 0.6911 \\
++ Log1p + Encoders & Add log1p + selective encodings & 0.7081 & 0.7048 \\
++ Domain features & Add key domain ratios & \textbf{0.7543} & \textbf{0.7529} \\
++ All statistics & Add all contextual z-scores & 0.7444 & 0.7432 \\
+\bottomrule
+\end{tabular}}
+\caption{Performance impact of feature configurations.}
+\end{table}
+
+\textbf{Result:} Accuracy rose from \textbf{0.70 → 0.75} after adding domain features.  
+Overuse of statistical aggregations slightly reduced performance due to redundancy.  
+Interpretable, business-aligned features delivered the largest and most stable improvements.
+
+% ==================================================
+\section{Model Selection \& Tuning}
+
+\subsection{Architectural Approach}
+Before discussing specific models, it is worth noting our engineering approach. We designed a modular and extensible framework in which model architectures and hyperparameters are decoupled from the training logic. By centralizing configurations (e.g., \texttt{config.py}), we could rapidly experiment with different model combinations and parameters without modifying the core codebase. This flexibility was crucial for our iterative tuning process.
+
+\subsection{Base Models and Initial Exploration}
+We began by establishing baselines using state-of-the-art gradient boosting decision tree (GBDT) algorithms: \textbf{XGBoost}, \textbf{CatBoost}, and \textbf{LightGBM}. These models are robust standards for tabular data.
+\begin{itemize}
+    \item \textbf{Tree Models:} Our initial cross-validation (CV) results showed strong performance, with CatBoost leading at 0.8550, followed closely by LightGBM (0.8403) and XGBoost (0.8400).
+    \item \textbf{Deep Learning (TabNet):} We experimented with TabNet to capture complex, non-linear patterns. Initially, using a standard configuration (16 decision/attention steps) resulted in overfitting. By reducing the architectural complexity to 8 steps and increasing regularization, we improved the score to 0.8516. However, we hit a ceiling around 0.86, suggesting that the dataset size was insufficient for deeper architectures to generalize effectively.
+\end{itemize}
+\subsection{Ensemble Strategies: Voting, Stacking, and more...}
+Our strategy evolved significantly throughout the project.
+
+\subsubsection{Phase 1: Heterogeneous Voting Ensemble}
+Initially, we hypothesized that combining fundamentally different algorithms would yield better results. We added an \textbf{MLP} (Multi-Layer Perceptron) to the tree models, which improved the score to 0.8616. However, adding simpler linear models (SVM, Naive Bayes, Ridge, KNN) failed to improve performance. Despite specific preprocessing for these linear models, their individual accuracy was too low ($\sim$0.50), acting as noise rather than valid signals in a hard voting mechanism. Also, using Voting with this small number of model numbers does not make sense. 
+
+\subsubsection{Phase 2: Randomized Stacking Ensemble (The Final Solution)}
+Realizing that "diversity" does not strictly require different \textit{algorithms} but can also arise from different \textit{views} of the data, we developed a new approach ("Ensemble 2").
+\begin{itemize}
+    \item \textbf{Diversity through Randomization:} Instead of manual tuning, we generated a large pool of tree models (XGBoost, CatBoost, Random Forest, Extra Trees, HistGradientBoosting) with randomized hyperparameters sampled from defined search spaces.
+    \item \textbf{Stacking vs. Voting:} We shifted from Hard Voting to \textbf{Stacking}, using Logistic Regression as a meta-learner to learn the optimal combination of base model predictions.
+    \item \textbf{Pruning:} We initially generated 100 models, achieving a score of 0.8630. Suspecting overfitting due to model redundancy, we pruned the ensemble size down to 50 and then to 20 selected models. This reduction significantly improved generalization, leading to our final best score.
+\end{itemize}
+
+\subsection{Hyperparameter Tuning and Preventing Overfitting}
+We employed a mix of random search for broad exploration and manual tuning for architectural constraints. To prevent overfitting, we utilized:
+\begin{enumerate}
+    \item \textbf{Regularization:} Adjusted $L_1$/$L_2$ penalties and reduced network depth for TabNet.
+    \item \textbf{Early Stopping:} Implemented in all boosting models to halt training when validation loss stagnated.
+    \item \textbf{Ensemble Pruning:} Reduced the randomized ensemble from 100 to 20 estimators (Distribution: 6 CatBoost, 6 XGB, 4 RF, 2 ExtraTrees, 2 HistGBM) to reduce variance.
+\end{enumerate}
+
+\subsection{Performance Comparison}
+Table \ref{tab:model_comparison} summarizes the progression of our model performance.
+
+\begin{table}[h]
+\centering
+\caption{Comparison of Model Performance (5-Fold CV)}
+\label{tab:model_comparison}
+\begin{tabular}{lc}
+\hline
+\textbf{Model / Strategy} & \textbf{Validation Accuracy} \\ \hline
+XGBoost (Baseline) & 0.8400 \\
+LightGBM & 0.8403 \\
+TabNet (After-Tuned) & 0.8516 \\
+CatBoost & 0.8550 \\
+Voting Ensemble (Trees + MLP) & 0.8616 \\
+Voting Ensemble (Trees + MLP + Linear) & 0.84 and below \\
+Stacking Ensemble (100 Tree Models) & 0.8630 \\
+\textbf{Stacking Ensemble (20 Models)} & \textbf{0.8787} \\ \hline
+\end{tabular}
+\end{table}
+
+\end{document}
