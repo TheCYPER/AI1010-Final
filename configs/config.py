@@ -140,7 +140,7 @@ class ModelConfig:
         # 模型架构参数（传给 TabNetClassifier.__init__）
         'n_d': 32,                  # 决策层维度
         'n_a': 32,                  # 注意力层维度
-        'n_steps': 4,               # 决策步数
+        'n_steps': 8,               # 决策步数
         'gamma': 1.3,               # 特征选择的松弛因子
         'n_independent': 2,         # 独立的 GLU 层数
         'n_shared': 2,              # 共享的 GLU 层数
