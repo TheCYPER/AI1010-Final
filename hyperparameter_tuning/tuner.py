@@ -280,18 +280,18 @@ class OptunaTuner(HyperparameterTuner):
                 from modeling.mlp_model import MLPModel
                 model_builder = lambda params: MLPModel(config=params)
             else:
-                from modeling import XGBoostModel
-                model_builder = lambda params: XGBoostModel(config=params)
+            from modeling import XGBoostModel
+            model_builder = lambda params: XGBoostModel(config=params)
                 logger.warning(f"Unknown model type {model_type}, defaulting to XGBoost")
         
         # Create study with TPE sampler for better optimization
         try:
             import optuna
-            self.study_ = optuna.create_study(
-                direction='maximize',
+        self.study_ = optuna.create_study(
+            direction='maximize',
                 study_name=f'{model_type}_tuning',
                 sampler=optuna.samplers.TPESampler(seed=self.config.training.random_state)
-            )
+        )
         except ImportError:
             logger.error("Optuna not installed. Install with: pip install optuna")
             raise

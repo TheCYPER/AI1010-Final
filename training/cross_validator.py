@@ -110,7 +110,7 @@ class CrossValidator:
         if model_type not in ["ensemble", "ensemble2", "ensemble2_gpu"]:
             model.build_model(num_classes=num_classes)
         elif model_type == "ensemble":
-            model.build_model(num_classes=num_classes)
+        model.build_model(num_classes=num_classes)
         # ensemble2 and ensemble2_gpu already build model in create_* if num_classes is provided
         
         return model
